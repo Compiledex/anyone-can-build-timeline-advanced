@@ -1,0 +1,197 @@
+"""Timeline: the backend. Start it with `python3 server.py`, then open http://localhost:8009
+
+This file has three parts:
+  CONTROLLER  reads each request and decides what to do
+  MODEL       the rules, and the database
+  VIEW        turns database rows into the JSON answer
+It uses only the Python standard library, so there is nothing to install.
+"""
+
+import argparse
+import json
+import os
+import sqlite3
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(HERE, "timeline.db")
+
+# The page files this server gives to the browser, and the type of each one.
+PAGE_FILES = {
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/style.css": ("style.css", "text/css; charset=utf-8"),
+    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+}
+
+
+# ============================================================================
+#  CONTROLLER
+#  Reads the request. Picks what to do. Asks the model. Sends the answer.
+# ============================================================================
+
+class TimelineHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path == "/posts":
+            try:
+                after = int(parse_qs(url.query).get("after", ["0"])[0])
+            except ValueError:
+                self.send_json(400, {"error": "'after' must be a whole number."})
+                return
+            rows = posts_after(self.server.db_path, after)
+            self.send_json(200, posts_to_json(rows))
+        elif url.path in PAGE_FILES:
+            file_name, content_type = PAGE_FILES[url.path]
+            try:
+                with open(os.path.join(HERE, file_name), "rb") as page_file:
+                    self.send_answer(200, content_type, page_file.read())
+            except OSError:
+                self.send_json(404, {"error": "The file " + file_name + " is missing."})
+        else:
+            self.send_json(404, {"error": "There is nothing at " + url.path})
+
+    def do_POST(self):
+        if urlparse(self.path).path != "/posts":
+            self.send_json(404, {"error": "You can only send a post to /posts"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(length))
+        except ValueError:
+            self.send_json(400, {"error": "The request must be JSON."})
+            return
+        if not isinstance(data, dict):
+            self.send_json(400, {"error": "The request must be a JSON object."})
+            return
+        try:
+            row = save_post(self.server.db_path, data.get("author"), data.get("text"))
+        except RuleBroken as problem:
+            self.send_json(400, {"error": str(problem)})
+            return
+        self.send_json(201, post_to_json(row))
+
+    def send_json(self, status, data):
+        body = json.dumps(data).encode("utf-8")
+        self.send_answer(status, "application/json; charset=utf-8", body)
+
+    def send_answer(self, status, content_type, body):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        # Each window asks for new posts every second. Printing all of those
+        # questions would fill the screen, so they are not printed.
+        if self.command == "GET" and self.path.startswith("/posts"):
+            return
+        BaseHTTPRequestHandler.log_message(self, format, *args)
+
+
+# ============================================================================
+#  MODEL
+#  The rules a post must follow, and the database that keeps the posts.
+#  A new rule goes here, never in the controller or the view.
+# ============================================================================
+
+MAX_TEXT = 280
+MAX_AUTHOR = 40
+
+
+class RuleBroken(Exception):
+    """A post broke one of the rules. The message says which rule."""
+
+
+def connect(db_path):
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row  # so a row can be read as row["author"]
+    return connection
+
+
+def create_table(db_path):
+    connection = connect(db_path)
+    connection.execute("CREATE TABLE IF NOT EXISTS posts ("
+                       "id INTEGER PRIMARY KEY, author TEXT, text TEXT, posted_at TEXT)")
+    connection.commit()
+    connection.close()
+
+
+def check_rules(author, text):
+    """Return the author and text without extra spaces, or raise RuleBroken."""
+    author = author.strip() if isinstance(author, str) else ""
+    text = text.strip() if isinstance(text, str) else ""
+    if author == "":
+        raise RuleBroken("The name must not be empty.")
+    if len(author) > MAX_AUTHOR:
+        raise RuleBroken(f"The name must be {MAX_AUTHOR} characters or fewer.")
+    if text == "":
+        raise RuleBroken("The post must not be empty.")
+    if len(text) > MAX_TEXT:
+        raise RuleBroken(f"The post must be {MAX_TEXT} characters or fewer.")
+    return author, text
+
+
+def save_post(db_path, author, text):
+    """Check the rules, save the post, and return the saved row."""
+    author, text = check_rules(author, text)
+    connection = connect(db_path)
+    cursor = connection.execute(
+        "INSERT INTO posts (author, text, posted_at) VALUES (?, ?, ?)",
+        (author, text, time.strftime("%H:%M")))
+    connection.commit()
+    row = connection.execute("SELECT * FROM posts WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    connection.close()
+    return row
+
+
+def posts_after(db_path, after):
+    """Return every post with an id larger than `after`, oldest first."""
+    connection = connect(db_path)
+    rows = connection.execute("SELECT * FROM posts WHERE id > ? ORDER BY id", (after,)).fetchall()
+    connection.close()
+    return rows
+
+
+# ============================================================================
+#  VIEW
+#  Turns database rows into the JSON the page reads.
+# ============================================================================
+
+def post_to_json(row):
+    return {"id": row["id"], "author": row["author"],
+            "text": row["text"], "posted_at": row["posted_at"]}
+
+
+def posts_to_json(rows):
+    return [post_to_json(row) for row in rows]
+
+
+# ============================================================================
+#  Starting the server
+# ============================================================================
+
+def make_server(port, db_path):
+    create_table(db_path)
+    server = ThreadingHTTPServer(("127.0.0.1", port), TimelineHandler)
+    server.db_path = db_path
+    return server
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the Timeline server.")
+    parser.add_argument("--port", type=int, default=8009)
+    port = parser.parse_args().port
+    server = make_server(port, DB_PATH)
+    print("Timeline is running at http://localhost:" + str(port))
+    print("The posts are kept in " + DB_PATH)
+    print("Press Ctrl+C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    server.server_close()

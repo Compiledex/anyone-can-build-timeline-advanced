@@ -1,0 +1,3 @@
+# The database. The server creates it when it starts; `make reset` deletes it.
+timeline.db
+__pycache__/
