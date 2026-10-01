@@ -29,7 +29,9 @@ timeline, newest first. It comes in two versions with the same screen:
 The three parts of `server.py`:
 
 - **Controller** (`TimelineHandler`): reads each request and picks what to do.
-- **Model** (`check_rules`, `save_post`, `posts_after`): the rules a post must follow, and the database.
+- **Model** (`check_rules`, `user_id_for`, `save_post`, `posts_after`): the rules a post must follow, and
+  the database, in two tables: `users` (each person once) and `posts` (each post points at its author
+  by `author_id`). A name is kept once, in `users`; never copy it into another table.
 - **View** (`post_to_json`, `posts_to_json`): turns database rows into the JSON the page reads.
 
 ## How to run it
@@ -37,7 +39,7 @@ The three parts of `server.py`:
 - Page-only: open `page-only/index.html` in a browser. Nothing to start.
 - With a backend: `make run`, then open <http://localhost:8009>. Press Ctrl+C to stop.
 - Start again with an empty timeline: `make reset`.
-- See what is saved: `sqlite3 with-backend/timeline.db 'select * from posts'`
+- See what is saved: `sqlite3 with-backend/timeline.db 'select * from users; select * from posts'`
 
 It needs only `python3` (3.9 or newer). Do not add libraries, packages or a build step.
 Write code that runs on Python 3.9: no `match` statements, and no `X | Y` in type hints.

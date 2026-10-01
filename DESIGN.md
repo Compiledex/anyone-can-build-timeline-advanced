@@ -49,7 +49,7 @@ index.html · style.css · app.js  ──  server.py  ────────�
 |---|---|---|
 | **Frontend** (runs on the user's device) | `index.html` · `style.css` · `app.js` | the same three files; `app.js` talks to the server instead of the browser |
 | **Backend** (runs on the server) | none: the rules run in `app.js` | `server.py`, Python 3 standard library (`http.server`), written in three labelled parts: **controller · model · view** |
-| **Data** (runs on the server) | the browser's `sessionStorage` | `timeline.db`, one SQLite file, created by the server when it starts |
+| **Data** (runs on the server) | the browser's `sessionStorage` | `timeline.db`, one SQLite file with two tables, `users` and `posts`, created by the server when it starts |
 
 **Technologies, and why each one.**
 
@@ -77,24 +77,31 @@ empty post too, because a user can change anything that runs on their own device
 
 ## 5. The data model
 
-One table:
+Two tables:
+
+| `users` | |
+|---|---|
+| `id` | integer, primary key, given by SQLite |
+| `name` | text, the display name, unique |
 
 | `posts` | |
 |---|---|
 | `id` | integer, primary key, given by SQLite |
-| `author` | text, the display name |
+| `author_id` | integer, foreign key: the `id` of a row in `users` |
 | `text` | text |
 | `posted_at` | text, `HH:MM`, local time |
 
-Example rows: `1 · Aiko · the library is open late tonight · 15:42` · `2 · Ben · thanks! · 15:42`.
+Example rows: `users` `1 · Aiko` · `2 · Ben` · `posts` `1 · 1 · the library is open late tonight ·
+15:42` · `2 · 2 · thanks! · 15:42`.
 
-The author's name is copied into every post. That is fine for this version, which has no accounts
-and no way to change a name. A version with accounts would keep each name once, in a `users` table,
-and every post would point at its author by ID.
+There are no accounts, so a user is found by name: the first post with a new name adds that person
+to `users`, and every later post with the same name points at the same row. Each name is kept once,
+and each post points at its author by number.
 
 ## 6. How I will know it works
 
-1. When a post is sent with text, it should come back with an `id` and a time.
+1. When a post is sent with text, it should come back with an `id` and a time, and the same name
+   should always point at the same user.
 2. When a window asks for posts after an `id`, it should get only newer posts, oldest first.
 3. When two windows are open on the backend version, a post from one should appear in the other
    within a second.
@@ -113,7 +120,7 @@ half of 4 are browser behaviour, and are checked by hand, in two windows.
 |---|---|---|---|---|
 | Two normal windows share `localStorage`, so the page-only version looks shared. | design | accept | It hides the one thing the app exists to show. | The page-only version uses `sessionStorage`. |
 | The error message says "280" even if the limit is changed. | design | accept | A rule should be written in one place. | The message reads the limit from the rule. |
-| The author's name is copied into every post, so a rename would break old posts. | design | reject | There are no accounts and no renaming in this version. | Nothing; section 5 says what a version with accounts would do. |
+| The author's name is copied into every post, so a rename would break old posts. | design | accept | One fact, one place, even without accounts. | A `users` table; each post points at its author by `author_id`. |
 | Pictures would make posts more realistic. | product | reject | A picture needs file storage as well as the database. | Nothing; section 2 says so. |
 | The page should check every rule, not only an empty post. | design | reject | The server is where the rules count, and a long post shows the server refusing it. | Nothing. |
 

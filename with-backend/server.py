@@ -2,7 +2,7 @@
 
 This file has three parts:
   CONTROLLER  reads each request and decides what to do
-  MODEL       the rules, and the database
+  MODEL       the rules, and the database (two tables: users and posts)
   VIEW        turns database rows into the JSON answer
 It uses only the Python standard library, so there is nothing to install.
 """
@@ -96,7 +96,9 @@ class TimelineHandler(BaseHTTPRequestHandler):
 # ============================================================================
 #  MODEL
 #  The rules a post must follow, and the database that keeps the posts.
-#  A new rule goes here, never in the controller or the view.
+#  Two tables: users (each person once) and posts (each post points at its
+#  author by the author's id). A new rule goes here, never in the controller
+#  or the view.
 # ============================================================================
 
 MAX_TEXT = 280
@@ -110,15 +112,30 @@ class RuleBroken(Exception):
 def connect(db_path):
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row  # so a row can be read as row["author"]
+    connection.execute("PRAGMA foreign_keys = ON")  # a post must point at a real user
     return connection
 
 
-def create_table(db_path):
+def create_tables(db_path):
     connection = connect(db_path)
+    old = [c["name"] for c in connection.execute("PRAGMA table_info(posts)")]
+    if old and "author_id" not in old:
+        connection.close()
+        raise SystemExit("timeline.db was made by an older version of Timeline. "
+                         "Run `make reset`, then start the server again.")
+    connection.execute("CREATE TABLE IF NOT EXISTS users ("
+                       "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)")
     connection.execute("CREATE TABLE IF NOT EXISTS posts ("
-                       "id INTEGER PRIMARY KEY, author TEXT, text TEXT, posted_at TEXT)")
+                       "id INTEGER PRIMARY KEY, "
+                       "author_id INTEGER NOT NULL REFERENCES users(id), "
+                       "text TEXT NOT NULL, posted_at TEXT NOT NULL)")
     connection.commit()
     connection.close()
+
+
+# Each post, with its author's name looked up in users. The view reads row["author"].
+POSTS_WITH_AUTHORS = ("SELECT posts.id, users.name AS author, posts.text, posts.posted_at "
+                      "FROM posts JOIN users ON users.id = posts.author_id")
 
 
 def check_rules(author, text):
@@ -136,15 +153,25 @@ def check_rules(author, text):
     return author, text
 
 
+def user_id_for(connection, name):
+    """Return the id of the user with this name, adding the user the first time."""
+    row = connection.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
+    if row is not None:
+        return row["id"]
+    return connection.execute("INSERT INTO users (name) VALUES (?)", (name,)).lastrowid
+
+
 def save_post(db_path, author, text):
     """Check the rules, save the post, and return the saved row."""
     author, text = check_rules(author, text)
     connection = connect(db_path)
+    author_id = user_id_for(connection, author)
     cursor = connection.execute(
-        "INSERT INTO posts (author, text, posted_at) VALUES (?, ?, ?)",
-        (author, text, time.strftime("%H:%M")))
+        "INSERT INTO posts (author_id, text, posted_at) VALUES (?, ?, ?)",
+        (author_id, text, time.strftime("%H:%M")))
     connection.commit()
-    row = connection.execute("SELECT * FROM posts WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    row = connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id = ?",
+                             (cursor.lastrowid,)).fetchone()
     connection.close()
     return row
 
@@ -152,7 +179,8 @@ def save_post(db_path, author, text):
 def posts_after(db_path, after):
     """Return every post with an id larger than `after`, oldest first."""
     connection = connect(db_path)
-    rows = connection.execute("SELECT * FROM posts WHERE id > ? ORDER BY id", (after,)).fetchall()
+    rows = connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id > ? ORDER BY posts.id",
+                              (after,)).fetchall()
     connection.close()
     return rows
 
@@ -176,7 +204,7 @@ def posts_to_json(rows):
 # ============================================================================
 
 def make_server(port, db_path):
-    create_table(db_path)
+    create_tables(db_path)
     server = ThreadingHTTPServer(("127.0.0.1", port), TimelineHandler)
     server.db_path = db_path
     return server

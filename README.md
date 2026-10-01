@@ -55,13 +55,16 @@ Stop the server with **Ctrl+C**, and both windows say *Cannot reach the server*.
 
 ## Open the store
 
-The backend keeps every post in one file, `with-backend/timeline.db`. To see what is inside:
+The backend keeps everything in one file, `with-backend/timeline.db`, in two tables: `users`,
+with each person once, and `posts`, where each post points at its author by number. To see what is
+inside:
 
 ```
-sqlite3 with-backend/timeline.db 'select * from posts'
+sqlite3 with-backend/timeline.db 'select * from users; select * from posts'
 ```
 
-Each line is one post: `id|author|text|posted_at`.
+A user line is `id|name`. A post line is `id|author_id|text|posted_at`: the `author_id` is the
+`id` of a user.
 
 To start again with an empty timeline, stop the server and run `make reset`.
 

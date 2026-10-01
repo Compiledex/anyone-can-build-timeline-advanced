@@ -21,7 +21,7 @@ class ModelTests(unittest.TestCase):
         # A new, empty database for every test, in a temporary folder.
         self.folder = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self.folder.name, "test.db")
-        server.create_table(self.db_path)
+        server.create_tables(self.db_path)
 
     def tearDown(self):
         self.folder.cleanup()
@@ -52,6 +52,24 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(row["author"], "Aiko")
         self.assertEqual(row["text"], "the library is open late")
         self.assertRegex(row["posted_at"], r"^\d\d:\d\d$")
+
+    def test_the_same_name_is_one_user(self):
+        server.save_post(self.db_path, "Aiko", "first")
+        server.save_post(self.db_path, "Aiko", "second")
+        server.save_post(self.db_path, "Ben", "third")
+        connection = server.connect(self.db_path)
+        users = connection.execute("SELECT name FROM users ORDER BY id").fetchall()
+        connection.close()
+        self.assertEqual([u["name"] for u in users], ["Aiko", "Ben"])
+
+    def test_a_post_points_at_its_author_by_id(self):
+        server.save_post(self.db_path, "Aiko", "the library is open late tonight")
+        connection = server.connect(self.db_path)
+        post = connection.execute("SELECT * FROM posts").fetchone()
+        user = connection.execute("SELECT * FROM users").fetchone()
+        connection.close()
+        self.assertEqual(post["author_id"], user["id"])
+        self.assertNotIn("author", post.keys())  # the name is kept once, in users
 
     def test_after_returns_only_newer_posts_oldest_first(self):
         server.save_post(self.db_path, "Aiko", "first")
