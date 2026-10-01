@@ -1,28 +1,25 @@
-# Design doc — Timeline (Class 9 and 10 demo, and homework)
+# Design doc — Timeline
 
 *Every name and example row here is made up.*
 
+---
+
+*The product spec*
+
 ## 1. The problem
 
-The architecture sessions need one small product the room can watch, open and change all
-afternoon. Timeline is a generic Twitter-like app: people post short messages, and everyone's
-posts appear on one timeline. It shows why a backend exists: two people on one app, where a version
-that keeps everything in the page cannot share a post, and the same app with a backend can.
-
-It is also the **homework repository**. After the architecture sessions each student clones it, asks
-their agent to explain its architecture (which file is the controller, the model, the view, and
-where the data lives), and then adds one feature to it, with a test. So the code has to be small
-enough for a beginner's agent to explain in full, and laid out so that the three parts are obvious
-from the file names alone.
+When two people use the same app, each needs to see what the other posted. A page that keeps
+everything in the browser cannot do that: each person's device keeps its own copy. Timeline is a
+small Twitter-like app built to show the difference. One version keeps everything in the page, and
+the other has a backend that every window shares.
 
 ## 2. Not in this version
 
 - No accounts, passwords or sign-in. Each window types a display name.
-- No follows, likes, replies, deleting or editing. The sessions ask the students to design the data
-  for follows and likes, and the homework asks them to add one of these.
+- No follows, likes, replies, deleting or editing. They are left for whoever extends the app.
+- No pictures. A picture needs a second kind of storage for its files, which is a design of its own.
 - No realtime connection (no WebSockets). The page asks for new posts once a second.
 - Nothing reachable from another machine. The server listens on `127.0.0.1` only.
-- No Twitter or X names, logos or look. It is a generic app of that kind.
 - No libraries, no install, no build step.
 
 ## 3. Screens
@@ -33,33 +30,38 @@ One screen, the same in both versions:
   (*x / 280*) and a **Post** button, and the timeline below it, newest first (author, text, time).
   Its one job: show everyone's posts, and take a new one.
 
-Large type and high contrast, because it is read from the back of the room on a projector.
+Large type and high contrast, so that it can be read from across a room.
+
+---
+
+*The engineering design*
 
 ## 4. The three parts
 
+```
+the browser                          the server                   the store
+index.html · style.css · app.js  ──  server.py  ──────────────────  timeline.db
+         a new post, "anything new?" ▶          save this, give me the newest ▶
+         ◀ saved, the newest posts               ◀ the rows
+```
+
 | Part | `page-only/` | `with-backend/` |
 |---|---|---|
-| **Frontend** | `index.html` · `style.css` · `app.js` | the same three files; `app.js` talks to the server instead of the browser |
-| **Backend** | none: the rules run in `app.js` | `server.py`, Python 3 standard library (`http.server`), written in three labelled parts: **controller · model · view** |
-| **Data** | the browser's `sessionStorage` | `timeline.db`, one SQLite file, created by the server when it starts |
+| **Frontend** (runs on the user's device) | `index.html` · `style.css` · `app.js` | the same three files; `app.js` talks to the server instead of the browser |
+| **Backend** (runs on the server) | none: the rules run in `app.js` | `server.py`, Python 3 standard library (`http.server`), written in three labelled parts: **controller · model · view** |
+| **Data** (runs on the server) | the browser's `sessionStorage` | `timeline.db`, one SQLite file, created by the server when it starts |
 
 **Technologies, and why each one.**
 
-- **Plain HTML, CSS and JavaScript.** It is what the students have written all term, and the
-  session's *The frontend has an inside too* shows these exact three files.
-- **Python 3 standard library only** (`http.server`, `sqlite3`, `json`). Python ships on the
-  classroom Mac (3.9.6 checked), so there is nothing to install, and the course's taught examples
-  are already Python. The code avoids anything newer than 3.9.
-- **SQLite.** One file, no server of its own, and the `sqlite3` command ships on the Mac too, so
-  *Open the store* is one command. Supabase is kept for *Guided integration*.
-- **Polling, once a second.** `fetch('/posts?after=<last id>')` on a timer. It is the simplest
-  thing that works, and it is exactly what the receive trace draws: the second window asks
-  *anything new?*
-- **`sessionStorage`, not `localStorage`, for the page-only version.** `localStorage` is what the
-  students' own pages used, but two normal windows of one browser share it, so the page-only version
-  can look shared and the demo fails in front of the room. `sessionStorage` belongs to one window,
-  which is what a second person's phone would have, and it still survives a reload. The slide's
-  wording is *remembers (in this window only)*. A private window is still used.
+- **Plain HTML, CSS and JavaScript.** Three files, each with one job: structure, looks, behaviour.
+- **Python 3 standard library only** (`http.server`, `sqlite3`, `json`). Python ships on a Mac, so
+  there is nothing to install. The code avoids anything newer than Python 3.9.
+- **SQLite.** One file, no database server of its own, and the `sqlite3` command can open it.
+- **Polling, once a second.** `fetch('/posts?after=<last id>')` on a timer: each window asks the
+  server *anything new?* It is the simplest thing that works.
+- **`sessionStorage`, not `localStorage`, for the page-only version.** Two normal windows of one
+  browser share `localStorage`, which would make the page-only version look shared. `sessionStorage`
+  belongs to one window, as each person's phone has its own storage, and it survives a reload.
 
 **The interfaces.**
 
@@ -70,8 +72,8 @@ Large type and high contrast, because it is read from the back of the room on a 
 | `GET /` and the three files | nothing | the page |
 
 **The model's rules:** text is not empty after trimming · text is at most 280 characters · author
-is not empty, at most 40 characters. The server checks them even though the page checks them too,
-because a user can change anything that runs on their own device.
+is not empty, at most 40 characters. The server checks them even though the page checks for an
+empty post too, because a user can change anything that runs on their own device.
 
 ## 5. The data model
 
@@ -86,63 +88,56 @@ One table:
 
 Example rows: `1 · Aiko · the library is open late tonight · 15:42` · `2 · Ben · thanks! · 15:42`.
 
-**This is the session's first bad model, on purpose.** The author's name is copied into every post.
-For a demo with two made-up people and no renaming, that is fine. It gives *Bad model 1* a callback
-the room has just seen: *the app I showed you does exactly this; for a demo, fine; for a real app
-with millions of people, not.*
+The author's name is copied into every post. That is fine for this version, which has no accounts
+and no way to change a name. A version with accounts would keep each name once, in a `users` table,
+and every post would point at its author by ID.
 
-## 6. Adversarial review
+## 6. How I will know it works
 
-*To be run: a checker agent reviews sections 1–5, and every objection is recorded here with its
-decision.*
+1. When a post is sent with text, it should come back with an `id` and a time.
+2. When a window asks for posts after an `id`, it should get only newer posts, oldest first.
+3. When two windows are open on the backend version, a post from one should appear in the other
+   within a second.
+4. **And when it goes wrong:** when a post is empty, or longer than 280 characters, the server
+   should refuse it and say which rule it broke. When the server is stopped, the page should say
+   *Cannot reach the server*, and recover by itself when the server starts again.
 
-## 7. Build or borrow
-
-Everything is built: it is a teaching demo, and building the store yourself is what *Build vs. buy*
-later compares with buying it.
+Sentences 1 and 2, and the first half of 4, are checked by `make test`. Sentence 3 and the second
+half of 4 are browser behaviour, and are checked by hand, in two windows.
 
 ---
 
-## As a homework repository
+## 7. Adversarial review
 
-- **`AGENTS.md`** says, in plain words, what each file's one job is, how to run it and how to test
-  it, and one rule: *keep the three parts of `server.py` separate; a new rule goes in the model.*
-  Codex, Claude Code and Antigravity all read it.
-- **`Makefile`**, because every course project has one: `make run` starts the server, `make test`
-  runs the checks, `make reset` deletes `timeline.db`.
-- **`README.md`** carries the homework: (1) ask your agent to explain the architecture, and write
-  down which file is the controller, the model and the view; (2) pick one feature from the list and
-  add it, with a test; (3) say which parts changed and why. The list: *follow someone, and a
-  following timeline* · *like a post, with a count* · *reply to a post* · *delete your own post* ·
-  *edit your own post*. Each touches a different set of parts, which is the point. Pictures are left
-  out on purpose: they need a second kind of storage for the files, which is a lesson of its own.
-- The repository is published on its own, as `kreativitea/anyone-can-build-timeline`, so students
-  can fork and clone it. The source is `demos/timeline/` in the course repository, because the
-  Class 10 deck reads `server.py` and `style.css` from there; a change is made there first and
-  then copied to the published repository.
+| Objection | About | Decision | Why | What changed |
+|---|---|---|---|---|
+| Two normal windows share `localStorage`, so the page-only version looks shared. | design | accept | It hides the one thing the app exists to show. | The page-only version uses `sessionStorage`. |
+| The error message says "280" even if the limit is changed. | design | accept | A rule should be written in one place. | The message reads the limit from the rule. |
+| The author's name is copied into every post, so a rename would break old posts. | design | reject | There are no accounts and no renaming in this version. | Nothing; section 5 says what a version with accounts would do. |
+| Pictures would make posts more realistic. | product | reject | A picture needs file storage as well as the database. | Nothing; section 2 says so. |
+| The page should check every rule, not only an empty post. | design | reject | The server is where the rules count, and a long post shows the server refusing it. | Nothing. |
+
+## 8. Build or borrow
+
+- **Built:** the page, the server and the data model.
+- **Borrowed:** Python and its standard library, SQLite (which comes with Python), and the browser.
+
+---
 
 ## Files
 
 ```
-demos/timeline/
-  DESIGN.md
-  README.md            how to run it, the two-window setup, and the homework
-  AGENTS.md            what each file does, for the student's agent
-  Makefile             make run · make test · make reset
-  page-only/           open index.html; nothing to start
-    index.html  style.css  app.js
-  with-backend/        python3 server.py, then localhost:8009
-    index.html  style.css  app.js
-    server.py          controller · model · view, labelled
-    test_server.py     unittest: the rules, save, and "after"
+README.md            what it is, how to run it, things to try
+AGENTS.md            what each file does, for an AI agent working here
+DESIGN.md            this document
+Makefile             make run · make test · make reset
+.claude/launch.json  starts the backend version from the Claude Code desktop app
+page-only/           open index.html; nothing to start
+  index.html  style.css  app.js
+with-backend/        make run, then http://localhost:8009
+  index.html  style.css  app.js
+  server.py          controller · model · view, labelled
+  test_server.py     unittest: the rules, saving, "after", one real round trip
 ```
 
-`timeline.db` is created next to `server.py` and is git-ignored. Deleting it resets the demo.
-
-## Checks
-
-- `make test`: an empty post is refused, a long one is refused, a saved post comes back with an
-  `id`, and `after` returns only newer posts; one round trip through the real server.
-- By hand, in a browser: two windows, a post from each, the rows opened with `sqlite3`.
-- The page-only version in two normal windows: the second window stays empty.
-- Screenshots of both demo moments and of the rows go in `lectures/class-09/assets/` as the fallback.
+`timeline.db` is created next to `server.py` and is git-ignored. `make reset` deletes it.

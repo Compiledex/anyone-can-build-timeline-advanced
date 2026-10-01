@@ -1,7 +1,6 @@
 # AGENTS.md — for the AI agent working in this repository
 
-The person asking you is a student who is new to programming. Many students read English as a
-second language. Explain in short, plain sentences, and define a technical word the first time you
+The person asking you may be new to programming, and may read English as a second language. Explain in short, plain sentences, and define a technical word the first time you
 use it. When you change code, say which file changed and why.
 
 ## What this is

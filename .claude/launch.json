@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "timeline",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["with-backend/server.py"],
+      "port": 8009
+    }
+  ]
+}
