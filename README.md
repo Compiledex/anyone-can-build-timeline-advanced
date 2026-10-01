@@ -88,7 +88,7 @@ trip through the real server.
    - like a post, with a count
    - reply to a post
    - delete your own post
-   - attach a picture
+   - edit your own post
 3. **Say what changed and why.** Which parts did your feature change: the page, the controller, the
    model, the view, the database? Why those parts, and not the others?
 

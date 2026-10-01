@@ -53,5 +53,5 @@ Write code that runs on Python 3.9: no `match` statements, and no `X | Y` in typ
 **Keep the three parts of `server.py` separate. A new rule goes in the model.** The controller does
 not check rules and does not touch the database. The view does not decide anything. If a feature
 needs a new rule, write it in the model, and check it in the page too, because the page and the
-server must agree. The server always checks, even when the page already did: never trust only the
-screen.
+server must agree. The server always checks, even when the page already did, because a user can change anything that
+runs on their own device.

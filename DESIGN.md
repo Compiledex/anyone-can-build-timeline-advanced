@@ -18,7 +18,7 @@ from the file names alone.
 ## 2. Not in this version
 
 - No accounts, passwords or sign-in. Each window types a display name.
-- No follows, likes, replies, deleting or pictures. The sessions ask the students to design the data
+- No follows, likes, replies, deleting or editing. The sessions ask the students to design the data
   for follows and likes, and the homework asks them to add one of these.
 - No realtime connection (no WebSockets). The page asks for new posts once a second.
 - Nothing reachable from another machine. The server listens on `127.0.0.1` only.
@@ -71,7 +71,7 @@ Large type and high contrast, because it is read from the back of the room on a 
 
 **The model's rules:** text is not empty after trimming · text is at most 280 characters · author
 is not empty, at most 40 characters. The server checks them even though the page checks them too,
-which is *never trust only the screen* in code.
+because a user can change anything that runs on their own device.
 
 ## 5. The data model
 
@@ -114,7 +114,8 @@ later compares with buying it.
   down which file is the controller, the model and the view; (2) pick one feature from the list and
   add it, with a test; (3) say which parts changed and why. The list: *follow someone, and a
   following timeline* · *like a post, with a count* · *reply to a post* · *delete your own post* ·
-  *attach a picture*. Each touches a different set of parts, which is the point.
+  *edit your own post*. Each touches a different set of parts, which is the point. Pictures are left
+  out on purpose: they need a second kind of storage for the files, which is a lesson of its own.
 - The repository is published on its own, as `kreativitea/anyone-can-build-timeline`, so students
   can fork and clone it. The source is `demos/timeline/` in the course repository, because the
   Class 10 deck reads `server.py` and `style.css` from there; a change is made there first and
