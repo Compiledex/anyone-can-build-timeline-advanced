@@ -73,6 +73,7 @@ class TimelineHandler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": str(problem)})
             return
         self.send_json(201, post_to_json(row))
+        print(post_to_log_line(row), flush=True)   # one line in the terminal for each new post
 
     def send_json(self, status, data):
         body = json.dumps(data).encode("utf-8")
@@ -197,6 +198,11 @@ def post_to_json(row):
 
 def posts_to_json(rows):
     return [post_to_json(row) for row in rows]
+
+
+def post_to_log_line(row):
+    """One line for the terminal: when the post was written, who wrote it, and what it says."""
+    return f"{row['posted_at']}  {row['author']}: {row['text']}"
 
 
 # ============================================================================

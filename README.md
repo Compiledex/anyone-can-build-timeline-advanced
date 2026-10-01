@@ -36,7 +36,8 @@ Open `page-only/index.html` in a browser. That is all.
 make run
 ```
 
-Then open <http://localhost:8009>. To stop the server, press **Ctrl+C** in the terminal.
+Then open <http://localhost:8009>. Each new post prints one line in the terminal: the time, who
+wrote it, and what it says. To stop the server, press **Ctrl+C** in the terminal.
 
 Without `make`, the same thing is: `cd with-backend`, then `python3 server.py`.
 
