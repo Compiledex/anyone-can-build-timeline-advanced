@@ -61,7 +61,7 @@ Large type and high contrast, because it is read from the back of the room on a 
   which is what a second person's phone would have, and it still survives a reload. The slide's
   wording is *remembers (in this window only)*. A private window is still used.
 
-**The seams.**
+**The interfaces.**
 
 | Request | What goes in | What comes out |
 |---|---|---|
