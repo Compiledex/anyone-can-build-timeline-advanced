@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 import time
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -73,6 +74,38 @@ class TimelineHandler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": str(problem)})
         except RuleBroken as problem:
             self.send_json(400, {"error": str(problem)})
+        else:
+            if method != "GET":
+                self.server.bell.ring()   # something was saved: tell every open window
+
+    # ---- Live updates ----
+
+    def get_events(self, query):
+        """Keep this request open, and send a short message each time the bell rings.
+
+        This is Server-Sent Events: the page's EventSource reads the messages. "retry" asks
+        the browser to connect again one second after the connection drops, and the first
+        message, "hello", makes the page catch up on anything it missed while it was away.
+        """
+        bell = self.server.bell
+        heard = bell.rings
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        try:
+            self.wfile.write(b"retry: 1000\ndata: hello\n\n")
+            while True:
+                rings = bell.wait(heard, timeout=15)
+                if rings == heard:
+                    # Nothing new for 15 seconds. A line starting with ":" is a comment that the
+                    # page ignores; it only keeps the connection from being closed as idle.
+                    self.wfile.write(b": still here\n\n")
+                else:
+                    heard = rings
+                    self.wfile.write(b"data: changed\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            pass   # the window was closed, or went to another page
 
     # ---- Accounts ----
 
@@ -227,15 +260,16 @@ class TimelineHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format, *args):
-        # Each window asks for new posts, likes and changes every second. Printing
-        # all of those questions would fill the screen, so they are not printed.
+        # Each window asks for new posts, likes and changes after every change anyone makes.
+        # Printing all of those questions would fill the screen, so they are not printed.
         if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
-                                                           "/users")):
+                                                           "/users", "/events")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
 
 ROUTES = {
+    ("GET", "/events"): TimelineHandler.get_events,
     ("POST", "/signup"): TimelineHandler.post_signup,
     ("POST", "/login"): TimelineHandler.post_login,
     ("POST", "/logout"): TimelineHandler.post_logout,
@@ -741,10 +775,35 @@ def post_to_log_line(row):
 #  Starting the server
 # ============================================================================
 
+class Bell:
+    """Rings once after every saved change. Each open /events request waits for it.
+
+    Requests are handled at the same time, each in its own thread, so the bell uses
+    a Condition: a lock that threads can also wait on until another thread wakes them.
+    """
+
+    def __init__(self):
+        self.rings = 0
+        self.condition = threading.Condition()
+
+    def ring(self):
+        with self.condition:
+            self.rings += 1
+            self.condition.notify_all()
+
+    def wait(self, heard, timeout):
+        """Wait until the bell has rung more than `heard` times, or until `timeout`
+        seconds pass. Return how many times it has rung."""
+        with self.condition:
+            self.condition.wait_for(lambda: self.rings != heard, timeout)
+            return self.rings
+
+
 def make_server(port, db_path):
     create_tables(db_path)
     server = ThreadingHTTPServer(("127.0.0.1", port), TimelineHandler)
     server.db_path = db_path
+    server.bell = Bell()
     return server
 
 

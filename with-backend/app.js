@@ -1,8 +1,9 @@
 // Timeline, the advanced version.
 //
-// This page keeps nothing itself. It sends each sign-up, log-in, post, reply, edit, delete
-// and like to the server (server.py), and every second it asks the server three things:
-// "any new posts?", "how many likes?" and "which posts were edited or deleted?"
+// This page keeps nothing itself. It sends each sign-up, log-in, post, reply, edit, delete,
+// like and follow to the server (server.py). It also keeps one connection open to the server,
+// and each time anyone changes anything, the server says so down that connection. The page
+// then asks: "any new posts?", "how many likes?" and "which posts were edited or deleted?"
 //
 // The server knows who you are from a cookie it set when you logged in. The page never sees
 // that cookie: it is HttpOnly, so JavaScript cannot read it, and the browser sends it by itself.
@@ -469,14 +470,44 @@ async function checkProfile() {
   }
 }
 
-// Ask, wait for the answers, wait one second, then ask again. Forever.
-// Posts first, so that every post is on the screen before its likes and changes arrive.
-async function keepChecking() {
-  await checkForNewPosts();
-  await checkLikes();
-  await checkChanges();
-  await checkProfile();
-  setTimeout(keepChecking, 1000);
+// ---- Live updates ----
+// The page keeps one connection open to /events: this is Server-Sent Events, and the
+// browser's EventSource does the work. The server sends a short message down it each time
+// anyone changes anything, and the page then catches up. If the connection drops,
+// EventSource connects again by itself, and the server's first message ("hello") makes
+// the page catch up on anything it missed.
+
+let catchingUp = false;
+let catchUpAgain = false;
+
+// Ask for everything new. Posts first, so that every post is on the screen before its
+// likes and changes arrive. If a message comes while we are still asking, go once more.
+async function catchUp() {
+  if (catchingUp) {
+    catchUpAgain = true;
+    return;
+  }
+  catchingUp = true;
+  do {
+    catchUpAgain = false;
+    await checkForNewPosts();
+    await checkLikes();
+    await checkChanges();
+    await checkProfile();
+  } while (catchUpAgain);
+  catchingUp = false;
+}
+
+function listen() {
+  const events = new EventSource("/events");
+  events.addEventListener("message", (event) => {
+    if (event.data === "hello") {
+      checkMe().then(catchUp);   // connected: who is logged in, and what did we miss?
+    } else {
+      catchUp();                 // "changed": someone saved something
+    }
+  });
+  events.addEventListener("error", () => showStatus(CANNOT_REACH));
 }
 
 // ---- What the buttons do ----
@@ -594,4 +625,4 @@ window.addEventListener("hashchange", () => {
   window.scrollTo(0, 0);
 });
 showScreen();
-checkMe().then(keepChecking);
+listen();

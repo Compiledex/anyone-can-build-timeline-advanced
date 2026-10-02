@@ -4,6 +4,7 @@ Most tests call the MODEL directly, with a database made only for the test.
 The last tests start the real server and talk to it, as the page does.
 """
 
+import http.client
 import http.cookiejar
 import json
 import os
@@ -407,6 +408,18 @@ class ModelTests(unittest.TestCase):
         row = server.profile_to_json(server.profile(self.db_path, "Ben", None))
         self.assertFalse(row["you_follow"])
 
+class BellTests(unittest.TestCase):
+
+    def test_a_ring_wakes_a_waiting_request(self):
+        bell = server.Bell()
+        threading.Timer(0.05, bell.ring).start()
+        self.assertEqual(bell.wait(0, timeout=5), 1)
+
+    def test_without_a_ring_the_wait_ends_after_the_timeout(self):
+        bell = server.Bell()
+        self.assertEqual(bell.wait(0, timeout=0.05), 0)
+
+
 class RealServerTest(unittest.TestCase):
 
     def setUp(self):
@@ -541,6 +554,42 @@ class RealServerTest(unittest.TestCase):
         self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
         self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
                          (200, {"name": "Aiko", "following": []}))
+
+
+    def open_events(self):
+        """Open /events, as the page's EventSource does, and read up to its first message."""
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1],
+                                                timeout=5)
+        connection.request("GET", "/events")
+        events = connection.getresponse()
+        self.assertEqual(events.getheader("Content-Type"), "text/event-stream")
+        self.assertEqual(self.next_message(events), "hello")
+        return connection, events
+
+    def next_message(self, events):
+        """Read lines until a "data:" line, and return what it says."""
+        while True:
+            line = events.readline().decode("utf-8")
+            if line.startswith("data: "):
+                return line[len("data: "):].strip()
+
+    def test_live_updates_tell_every_window_about_a_change(self):
+        aiko = self.signed_up("Aiko")
+        first, first_events = self.open_events()
+        second, second_events = self.open_events()
+        self.send(aiko, "POST", "/posts", {"text": "hello"})
+        self.assertEqual(self.next_message(first_events), "changed")
+        self.assertEqual(self.next_message(second_events), "changed")
+        first.close()
+        second.close()
+
+    def test_a_refused_request_does_not_ring_the_bell(self):
+        aiko = self.signed_up("Aiko")
+        rings = self.server.bell.rings
+        self.send(aiko, "POST", "/posts", {"text": ""})
+        self.send(self.browser(), "POST", "/posts", {"text": "not logged in"})
+        self.send(aiko, "GET", "/posts?after=0")
+        self.assertEqual(self.server.bell.rings, rings)
 
 
 if __name__ == "__main__":
