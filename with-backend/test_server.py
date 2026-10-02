@@ -865,6 +865,31 @@ class SeedTests(unittest.TestCase):
         self.assertTrue(model.notifications_of(self.db_path, aiko_id))
         self.assertGreater(model.unread_messages(self.db_path, aiko_id), 0)   # something new to see
 
+    def test_welcome_fills_a_real_accounts_notifications_messages_and_bookmarks(self):
+        seed.seed(self.db_path)
+        token = model.sign_up(self.db_path, "Alex", PASSWORD)
+        alex = model.user_for_token(self.db_path, token)["id"]
+        done = seed.welcome(self.db_path, "alex")
+        self.assertEqual(done["messages"], 3)
+        kinds = {row["kind"] for row in model.notifications_of(self.db_path, alex)}
+        self.assertEqual(kinds, {"follow", "like", "reply", "mention", "repost", "quote"})
+        self.assertGreater(model.unread_notifications(self.db_path, alex), 0)
+        self.assertEqual(model.unread_messages(self.db_path, alex), 3)
+        self.assertEqual(len(model.bookmarks_of(self.db_path, alex)), 3)
+        rows = view.posts_to_json(model.posts_after(self.db_path, 0))
+        self.assertIn(("Alex", seed.WELCOME_POST), [(row["author"], row["text"]) for row in rows])
+        again = seed.welcome(self.db_path, "Alex")            # twice does no harm
+        self.assertEqual(again["follows"] + again["likes"] + again["reposts"] + again["bookmarks"], 0)
+        self.assertIs(model.now.__name__, "now")               # the real clock is back
+
+    def test_welcome_needs_a_real_account_and_the_made_up_people(self):
+        with self.assertRaises(SystemExit):
+            seed.welcome(self.db_path, "Alex")                # nobody is here yet
+        seed.seed(self.db_path)
+        for wrong in ["Nobody", "Aiko"]:
+            with self.assertRaises(SystemExit):
+                seed.welcome(self.db_path, wrong)
+
     def test_the_seed_puts_the_real_clock_back(self):
         real_now = model.now
         seed.seed(self.db_path)

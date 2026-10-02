@@ -3,11 +3,16 @@ and messages, so the app looks alive. Notifications come by themselves: the mode
 
 Run it on an empty timeline:  make reset seed   (or: python3 seed.py)
 
+Then give your own account something to see:  make welcome NAME=Alex
+(or: python3 seed.py --welcome Alex). The made-up people follow you, mention you, react to a post
+of yours, and send you messages, and you get some bookmarks, all in the last two hours.
+
 Every made-up person has the same password, PASSWORD below, so you can log in as any of them.
 Everything is saved through the model in model.py, so the made-up data follows the same
 rules as real data. The people, their posts and their messages are invented.
 """
 
+import argparse
 import random
 import time
 
@@ -237,9 +242,141 @@ def fill(db_path):
             "messages": len(MESSAGES)}
 
 
+# ---- Activity for a real account: make welcome NAME=Alex ----
+
+# If the account has no posts yet, this one is posted in its name for the others to react to.
+WELCOME_POST = "Hello Timeline! 👋 Just joined."
+
+# What the made-up people do, oldest first: (who, how many minutes ago, what, words or the post).
+# "post" is the account's own post. Every one of these makes a notification, except the messages.
+WELCOME = [
+    ("Kenta", 140, "follow", None),
+    ("Hana", 138, "follow", None),
+    ("Mei", 135, "follow", None),
+    ("Kenta", 130, "like", "post"),
+    ("Hana", 125, "reply", "Welcome! 🎉 Come to the language exchange table at lunch, everyone is welcome."),
+    ("Mei", 110, "mention", "Say hi to @{name}, new on Timeline! #welcome"),
+    ("Lucas", 100, "repost", "post"),
+    ("Aiko", 90, "quote", "Another new face in #Hirakata 🍁"),
+    ("Ben", 80, "like", "post"),
+    ("Sofia", 70, "like", "post"),
+    ("Yuki", 60, "like", "post"),
+    ("Ben", 50, "follow", None),
+    ("Kenta", 45, "message", "Welcome! If you need help with anything on campus, just ask."),
+    ("Ravi", 35, "mention", "Cooking club this Friday: gyoza! @{name} you should come 🥟"),
+    ("Aiko", 30, "message", "Hi! Are you coming to the JLPT study group tonight? Room 204, 7 pm."),
+    ("Aiko", 29, "message", "Mei says bring snacks 😄"),
+    ("Emma", 20, "like", "post"),
+]
+
+# Posts the account saves to its bookmarks, by their key in POSTS; and people it follows.
+WELCOME_BOOKMARKS = ["jlpt", "kyoto", "miso"]
+WELCOME_FOLLOWS = ["Aiko", "Mei", "Kenta"]
+
+
+def welcome(db_path, name):
+    real_now = model.now
+    try:
+        return fill_welcome(db_path, name)
+    finally:
+        model.now = real_now   # the real clock again, whatever happened
+
+
+def made_up_post(connection, key):
+    """The id of a made-up post, found by its words, or None."""
+    words = next(text for k, _, _, text, _ in POSTS if k == key)
+    row = connection.execute("SELECT id FROM posts WHERE text = ? AND deleted_at IS NULL", (words,)).fetchone()
+    return row["id"] if row else None
+
+
+def fill_welcome(db_path, name):
+    model.create_tables(db_path)   # so that an empty database gets a clear answer, not a crash
+    connection = model.connect(db_path)
+    try:
+        try:
+            person = model.find_user(connection, name)
+        except model.NotFound:
+            raise SystemExit(f"There is no account called {name}. Sign up with that name first.")
+        ids = {}
+        for made_up in PEOPLE:
+            row = connection.execute("SELECT id FROM users WHERE name = ?", (made_up,)).fetchone()
+            if row is None:
+                raise SystemExit("The made-up people are not here. Run `make seed` first.")
+            ids[made_up] = row["id"]
+        if person["name"] in PEOPLE:
+            raise SystemExit(f"{person['name']} is one of the made-up people. Give your own account's name.")
+        own = connection.execute(
+            "SELECT id FROM posts WHERE author_id = ? AND reply_to IS NULL AND repost_of IS NULL "
+            "AND deleted_at IS NULL ORDER BY id DESC LIMIT 1", (person["id"],)).fetchone()
+        bookmarks = [made_up_post(connection, key) for key in WELCOME_BOOKMARKS]
+    finally:
+        connection.close()
+
+    if own is None:
+        at(150)
+        post_id = model.save_post(db_path, person["id"], WELCOME_POST)["id"]
+    else:
+        post_id = own["id"]
+
+    done = {"follows": 0, "likes": 0, "replies": 0, "mentions": 0, "reposts": 0, "quotes": 0,
+            "messages": 0, "bookmarks": 0}
+    for who, minutes_ago, what, words in WELCOME:
+        at(minutes_ago)
+        try:
+            if what == "follow":
+                model.follow(db_path, ids[who], person["name"])
+                done["follows"] += 1
+            elif what == "like":
+                model.like_post(db_path, ids[who], post_id)
+                done["likes"] += 1
+            elif what == "reply":
+                model.save_post(db_path, ids[who], words, reply_to=post_id)
+                done["replies"] += 1
+            elif what == "mention":
+                model.save_post(db_path, ids[who], words.format(name=person["name"]))
+                done["mentions"] += 1
+            elif what == "repost":
+                model.repost(db_path, ids[who], post_id)
+                done["reposts"] += 1
+            elif what == "quote":
+                model.save_post(db_path, ids[who], words, quote_of=post_id)
+                done["quotes"] += 1
+            elif what == "message":
+                model.send_message(db_path, ids[who], person["name"], words)
+                done["messages"] += 1
+        except model.RuleBroken:
+            pass   # already done before (welcome was run twice): skip it
+
+    at(10)
+    for post in bookmarks:
+        if post is not None:
+            try:
+                model.bookmark(db_path, person["id"], post)
+                done["bookmarks"] += 1
+            except model.RuleBroken:
+                pass
+    for other in WELCOME_FOLLOWS:
+        try:
+            model.follow(db_path, person["id"], other)
+        except model.RuleBroken:
+            pass
+    return done
+
+
 if __name__ == "__main__":
-    made = seed(model.DB_PATH)
-    print(f"Made {made['people']} people, {made['posts']} posts, replies, reposts and quotes, "
-          f"{made['likes']} likes, {made['follows']} follows and {made['messages']} messages.")
-    print(f"Log in as any of them with the password {PASSWORD}, for example: "
-          + ", ".join(list(PEOPLE)[:3]) + ".")
+    parser = argparse.ArgumentParser(description="Fill the timeline with made-up data.")
+    parser.add_argument("--welcome", metavar="NAME",
+                        help="give this existing account made-up notifications, messages and bookmarks")
+    name = parser.parse_args().welcome
+    if name:
+        done = welcome(model.DB_PATH, name)
+        print(f"{name} got {done['follows']} new followers, {done['likes']} likes, {done['replies']} reply, "
+              f"{done['mentions']} mentions, {done['reposts']} repost, {done['quotes']} quote, "
+              f"{done['messages']} messages and {done['bookmarks']} bookmarks. Log in as {name} to see them.")
+    else:
+        made = seed(model.DB_PATH)
+        print(f"Made {made['people']} people, {made['posts']} posts, replies, reposts and quotes, "
+              f"{made['likes']} likes, {made['follows']} follows and {made['messages']} messages.")
+        print(f"Log in as any of them with the password {PASSWORD}, for example: "
+              + ", ".join(list(PEOPLE)[:3]) + ".")
+        print("To give your own account something to see as well: make welcome NAME=YourName")

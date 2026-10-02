@@ -25,7 +25,9 @@ make run
 
 Then open <http://localhost:8010>. `make reset seed` fills the timeline with 12 made-up students and
 three days of posts, replies, reposts, quotes, likes, follows, bookmarks and messages. Log in as any of
-them, for example **Aiko**, with the password **timeline123**, or sign up with your own name.
+them, for example **Aiko**, with the password **timeline123**, or sign up with your own name. Then
+`make welcome NAME=YourName` gives your account made-up followers, likes, replies, mentions,
+messages and bookmarks from the last two hours, so you can see how it feels.
 
 To stop the server, press **Ctrl+C**. The simple version runs on port 8009, so both can run at once.
 

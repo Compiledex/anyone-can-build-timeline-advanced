@@ -1,12 +1,13 @@
 # Timeline: short commands for this project. Type `make help` to see them.
 
-.PHONY: help run test reset seed
+.PHONY: help run test reset seed welcome
 
 help:
 	@echo "make run    start the server (with-backend version), then open http://localhost:8010"
 	@echo "make test   run the checks in with-backend/test_server.py"
 	@echo "make reset  delete the database and the uploaded pictures, so the timeline starts empty"
 	@echo "make seed   fill an empty timeline with made-up people and posts (make reset seed)"
+	@echo "make welcome NAME=Alex   give your own account made-up notifications, messages and bookmarks"
 
 run:
 	cd with-backend && python3 server.py
@@ -19,3 +20,7 @@ reset:
 
 seed:
 	cd with-backend && python3 seed.py
+
+welcome:
+	@test -n "$(NAME)" || (echo "Say whose account: make welcome NAME=YourName" && false)
+	cd with-backend && python3 seed.py --welcome "$(NAME)"

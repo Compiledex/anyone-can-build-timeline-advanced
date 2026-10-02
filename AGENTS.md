@@ -53,6 +53,8 @@ The three parts of the backend:
 
 - `make run`, then open <http://localhost:8010>. Press Ctrl+C to stop.
 - A timeline with made-up people: `make reset seed`. They all have the password `timeline123`.
+- Made-up activity for a real account (followers, likes, replies, mentions, messages, bookmarks):
+  `make welcome NAME=Alex`.
 - Start again with an empty timeline: `make reset` (deletes the database and the uploaded pictures).
 - See what is saved: `sqlite3 with-backend/timeline.db '.tables'`
 
