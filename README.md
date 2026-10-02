@@ -1,71 +1,53 @@
-# Timeline
+# Timeline, the advanced version
 
-A small app where people post short messages. Everyone's posts appear on one timeline, newest
-first. It comes in two versions with the same screen:
+A small Twitter-like app. People sign up, post short messages, reply, like, edit and delete their
+own posts, follow each other, and open each other's profiles. Every open window sees every change
+at once. The look follows the Kansai Gaidai Asian Studies Program site: deep blue on white, EB
+Garamond for names, navy and gold for profiles.
 
-- **`page-only/`**: everything runs in the browser. There is no server. Each window keeps its own
-  posts, so nothing is shared.
-- **`with-backend/`**: the page sends each post to a small Python server, which saves it in a
-  database. Every window asks the server for new posts once a second, so every window sees every post.
+This is the advanced copy of Timeline. The simple version (no accounts, a page-only version, a
+check for news every second) lives in its own folder, kept as it was, so you can compare the two.
 
-The difference between the two is the reason a backend exists.
+You need a web browser and `python3`, version 3.9 or newer. A Mac already has it. There is nothing
+to install.
 
-You need a web browser. For the backend version you also need `python3`, version 3.9 or newer.
-A Mac already has it. There is nothing to install.
-
-## Get your own copy
-
-On GitHub, press **Fork** at the top of this page. That makes a copy under your own account. Then
-clone your copy and go into its folder (put your GitHub name where it says `YOUR-NAME`):
+## Run it
 
 ```
-git clone https://github.com/YOUR-NAME/anyone-can-build-timeline.git
-cd anyone-can-build-timeline
-make test
-```
-
-Every check should pass. If one does not, ask your agent why before you change anything.
-
-## Run the page-only version
-
-Open `page-only/index.html` in a browser. That is all.
-
-## Run the backend version
-
-```
+make reset seed
 make run
 ```
 
-Then open <http://localhost:8010>. Each new post prints one line in the terminal: the time, who
-wrote it, and what it says. To stop the server, press **Ctrl+C** in the terminal.
+Then open <http://localhost:8010>. `make reset seed` fills the timeline with 12 made-up students and
+three days of posts, replies, likes and follows. Log in as any of them, for example **Aiko**, with
+the password **timeline123**, or sign up with your own name.
 
-Without `make`, the same thing is: `cd with-backend`, then `python3 server.py`.
+Each new post prints one line in the terminal. To stop the server, press **Ctrl+C**.
 
-In the Claude Code desktop app, `.claude/launch.json` starts the same server and opens it for you.
+The simple version runs on port 8009, so both can run at the same time.
 
-## See the difference
+## See it work
 
-Open the app in two windows side by side, one of them a **private window** (Chrome: Incognito,
-Safari: Private Window), and post from each. With the backend, a post from one window appears in the
-other within a second. Page-only, it never does: each window keeps only its own posts. Open a new
-window rather than duplicating a tab, because a duplicated tab copies the first tab's
-`sessionStorage`.
-
-Stop the server with **Ctrl+C**, and both windows say *Cannot reach the server*. Start it again with
-`make run`, and they recover by themselves.
+- **Accounts.** Anyone can read the timeline. To post, reply, like or follow, log in. Only the
+  author sees **Edit** and **Delete**, and the server refuses everyone else, even if they send the
+  request without the page.
+- **Profiles.** Click a name. The address becomes `#/@Ben`, so the Back button works.
+- **Follows.** Press **Follow** on a profile, then open the **Following** tab.
+- **Live updates.** Open the app in two browsers, one of them a **private window** (it has its own
+  cookies, so it can be logged in as someone else). Post or like in one, and the other changes at
+  once. Stop the server: both say *Cannot reach the server*. Start it: both recover by themselves.
 
 ## Open the store
 
-The backend keeps everything in one file, `with-backend/timeline.db`, in two tables: `users`,
-with each person once, and `posts`, where each post points at its author by number. To see what is
-inside:
+Everything is in one file, `with-backend/timeline.db`, in five tables: `users`, `sessions`,
+`posts`, `likes` and `follows`.
 
 ```
-sqlite3 with-backend/timeline.db 'select * from users; select * from posts'
+sqlite3 with-backend/timeline.db 'select id, name, joined_at from users; select * from follows'
 ```
 
-A user line is `id|name`. A post line is `id|author_id|text|posted_at`: the `author_id` is the
-`id` of a user.
+Look at `password_hash` in `users`: it starts with `pbkdf2_sha256$600000$`, then a random salt, then
+the hash. The password itself is not there, and cannot be worked out from it.
 
 To start again with an empty timeline, stop the server and run `make reset`.
 
@@ -75,25 +57,12 @@ To start again with an empty timeline, stop the server and run `make reset`.
 make test
 ```
 
-This runs the checks in `with-backend/test_server.py`. They test the rules (an empty post and a
-post over 280 characters are refused), saving a post, asking only for newer posts, and one full
-trip through the real server.
+This runs the checks in `with-backend/test_server.py`: accounts and passwords, posts, likes,
+replies, edits, deletes, profiles, follows, live updates, the made-up data, and full trips through
+the real server.
 
-## Things to try
+## Read more
 
-1. **Explain it.** Ask your AI agent to explain the architecture of this repository. Write down, in
-   your own words, which file or part is the **controller**, which is the **model**, which is the
-   **view**, and where the data lives.
-2. **Add one feature, with a test.** Pick one from this list:
-   - follow someone, and show a "following" timeline
-   - like a post, with a count
-   - reply to a post
-   - delete your own post
-   - edit your own post
-3. **Say what changed and why.** Which parts did your feature change: the page, the controller, the
-   model, the view, the database? Why those parts, and not the others?
-
-Each feature changes a different set of parts.
-
-Keep the three parts of `server.py` separate. A new rule goes in the model. `make test` must pass
-when you finish.
+`DESIGN.md` explains every request, table and rule, and why each technology was chosen.
+`AGENTS.md` is for an AI agent working here. Keep the three parts of `server.py` separate, and put
+a new rule in the model. `make test` must pass when you finish.
