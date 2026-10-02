@@ -16,13 +16,19 @@
     <div class="top-bar-inner">
       <a class="brand" href="#/">Timeline</a>
       <div id="account-bar" class="account-bar" hidden>
-        <span>Logged in as <strong id="me-name"></strong></span>
+        <span>Logged in as <a id="me-name" class="me-name"></a></span>
         <button type="button" id="log-out" class="small-button">Log out</button>
       </div>
     </div>
   </header>
 
   <main>
+    <section id="profile" class="profile" hidden>
+      <a class="profile-back" href="#/">← The whole timeline</a>
+      <h1 id="profile-name" class="profile-name"></h1>
+      <p id="profile-facts" class="profile-facts"></p>
+    </section>
+
     <form id="login-form" class="card" hidden>
       <h2 class="card-title">Join the conversation</h2>
       <p class="card-hint">Anyone can read the timeline. Log in, or sign up with a new name, to post, reply and like.</p>
@@ -51,6 +57,7 @@
 
     <p id="status" class="status" role="status"></p>
 
+    <p id="empty" class="empty" hidden>Nothing here yet.</p>
     <ol id="timeline" class="timeline" aria-label="Posts, newest first"></ol>
   </main>
 

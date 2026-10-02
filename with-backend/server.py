@@ -93,6 +93,12 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def get_me(self, query):
         self.send_json(200, me_to_json(current_user(self.db, self.session_token())))
 
+    # ---- People ----
+
+    def get_users(self, query):
+        name = query.get("name", [""])[0]
+        self.send_json(200, profile_to_json(profile(self.db, name)))
+
     # ---- Posts ----
 
     def get_posts(self, query):
@@ -205,7 +211,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Each window asks for new posts, likes and changes every second. Printing
         # all of those questions would fill the screen, so they are not printed.
-        if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me")):
+        if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
+                                                           "/users")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
@@ -215,6 +222,7 @@ ROUTES = {
     ("POST", "/login"): TimelineHandler.post_login,
     ("POST", "/logout"): TimelineHandler.post_logout,
     ("GET", "/me"): TimelineHandler.get_me,
+    ("GET", "/users"): TimelineHandler.get_users,
     ("GET", "/posts"): TimelineHandler.get_posts,
     ("POST", "/posts"): TimelineHandler.post_posts,
     ("PUT", "/posts"): TimelineHandler.put_posts,
@@ -256,7 +264,7 @@ class NotLoggedIn(RuleBroken):
 
 
 class NotFound(RuleBroken):
-    """The request names a post that does not exist."""
+    """The request names a post or a person that does not exist."""
 
 
 def connect(db_path):
@@ -444,6 +452,31 @@ def user_for_token(db_path, token):
     return user
 
 
+# ---- People ----
+
+def find_user(connection, name):
+    """Return the user with this name (any capitals), or raise NotFound."""
+    name = name.strip() if isinstance(name, str) else ""
+    row = connection.execute("SELECT id, name, joined_at FROM users WHERE name = ?",
+                             (name,)).fetchone()
+    if row is None:
+        raise NotFound(f"There is no one called {name or 'that'}.")
+    return row
+
+
+def profile(db_path, name):
+    """Return a person's name, when they joined, and how many posts they have (not deleted ones)."""
+    connection = connect(db_path)
+    try:
+        user = find_user(connection, name)
+        return connection.execute(
+            "SELECT name, joined_at, "
+            "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts "
+            "FROM users WHERE id = ?", (user["id"],)).fetchone()
+    finally:
+        connection.close()
+
+
 # ---- Posts ----
 
 def check_text(text):
@@ -594,6 +627,10 @@ def like_counts(db_path, viewer_id=None):
 
 def me_to_json(user):
     return {"name": user["name"] if user else None}
+
+
+def profile_to_json(row):
+    return {"name": row["name"], "joined_at": row["joined_at"], "posts": row["posts"]}
 
 
 def post_to_json(row):

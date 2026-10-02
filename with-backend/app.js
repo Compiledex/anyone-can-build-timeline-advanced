@@ -26,6 +26,10 @@ const modeLine = document.getElementById("mode-line");
 const modeText = document.getElementById("mode-text");
 const cancelButton = document.getElementById("cancel-mode");
 const submitButton = document.getElementById("submit-button");
+const profileSection = document.getElementById("profile");
+const profileName = document.getElementById("profile-name");
+const profileFacts = document.getElementById("profile-facts");
+const emptyLine = document.getElementById("empty");
 
 // The logged-in person's name, or null when nobody is logged in.
 let me = null;
@@ -60,6 +64,67 @@ function shortTime(stamp) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " " + clock;
 }
 
+// "2026-10-02 15:42" becomes "2 October 2026".
+function longDate(stamp) {
+  return new Date(stamp.split(" ")[0] + "T00:00")
+    .toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// "1 post", "2 posts".
+function plural(count, word) {
+  return count + " " + word + (count === 1 ? "" : "s");
+}
+
+// ---- Screens: the timeline, or one person's profile ----
+// The address says which: "#/" is the timeline, "#/@Ben" is Ben's profile.
+// Because the screen is in the address, the browser's Back button works.
+
+function profileInAddress() {
+  let address = location.hash;
+  try {
+    address = decodeURIComponent(address);
+  } catch (error) {
+    // A broken address, like "#/@%": use it as it is.
+  }
+  return address.startsWith("#/@") ? address.slice(3) : null;
+}
+
+function profileLink(name) {
+  return "#/@" + encodeURIComponent(name);
+}
+
+// Show the screen the address asks for.
+function showScreen() {
+  const name = profileInAddress();
+  profileSection.hidden = name === null;
+  document.title = name === null ? "Timeline" : name + " · Timeline";
+  if (name !== null) {
+    profileName.textContent = name;
+    profileFacts.textContent = "";
+    checkProfile();
+  }
+  filterPosts();
+}
+
+// Show only the threads that belong on this screen. A thread is a post with all its replies.
+// On a profile, a thread belongs if the person wrote the post or any reply in it.
+function filterPosts() {
+  const name = profileInAddress();
+  let shownAny = false;
+  for (const item of timeline.children) {
+    const belongs = name === null || threadHasAuthor(item, name);
+    item.hidden = !belongs;
+    shownAny = shownAny || belongs;
+  }
+  emptyLine.hidden = shownAny;
+}
+
+function threadHasAuthor(item, name) {
+  const wanted = name.toLowerCase();   // names are the same whatever their capitals
+  const posts = [item, ...item.querySelectorAll(".post")];
+  return posts.some((post) => post.dataset.author.toLowerCase() === wanted);
+}
+
 // Put one post on the screen: a new post at the top, a reply under its post.
 function showPost(post) {
   // Skip a post this window already shows.
@@ -70,9 +135,11 @@ function showPost(post) {
 
   const item = document.createElement("li");
   item.className = "post";
+  item.dataset.author = post.author;
 
-  const author = document.createElement("span");
+  const author = document.createElement("a");
   author.className = "post-author";
+  author.href = profileLink(post.author);
   author.textContent = post.author;
 
   const time = document.createElement("span");
@@ -181,6 +248,7 @@ function showMe(name) {
   me = name;
   accountBar.hidden = me === null;
   meName.textContent = me || "";
+  meName.href = me ? profileLink(me) : "#/";
   loginForm.hidden = me !== null;
   postForm.hidden = me === null;
   for (const postId of shownPosts.keys()) {
@@ -289,6 +357,9 @@ async function checkForNewPosts() {
     for (const post of posts) {
       showPost(post);
     }
+    if (posts.length > 0) {
+      filterPosts();
+    }
     if (statusLine.textContent === CANNOT_REACH) {
       showStatus("");
     }
@@ -319,12 +390,36 @@ async function checkChanges() {
   }
 }
 
+// On a profile screen, ask the server about that person.
+async function checkProfile() {
+  const name = profileInAddress();
+  if (name === null) {
+    return;
+  }
+  try {
+    const response = await fetch("/users?name=" + encodeURIComponent(name));
+    const person = await response.json();
+    if (profileInAddress() !== name) {
+      return;   // the screen changed while we waited
+    }
+    if (!response.ok) {
+      profileFacts.textContent = person.error;   // "There is no one called …"
+      return;
+    }
+    profileName.textContent = person.name;
+    profileFacts.textContent = "Joined " + longDate(person.joined_at) + " · " + plural(person.posts, "post");
+  } catch (error) {
+    showStatus(CANNOT_REACH);
+  }
+}
+
 // Ask, wait for the answers, wait one second, then ask again. Forever.
 // Posts first, so that every post is on the screen before its likes and changes arrive.
 async function keepChecking() {
   await checkForNewPosts();
   await checkLikes();
   await checkChanges();
+  await checkProfile();
   setTimeout(keepChecking, 1000);
 }
 
@@ -426,4 +521,9 @@ logOutButton.addEventListener("click", logOut);
 textBox.addEventListener("input", updateCount);
 cancelButton.addEventListener("click", cancelMode);
 postForm.addEventListener("submit", sendPost);
+window.addEventListener("hashchange", () => {
+  showScreen();
+  window.scrollTo(0, 0);
+});
+showScreen();
 checkMe().then(keepChecking);

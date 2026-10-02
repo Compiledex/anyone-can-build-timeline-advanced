@@ -359,3 +359,68 @@ button:hover {
   opacity: 1;
   background: var(--surface-hover);
 }
+
+/* ---- Profiles ---- */
+
+/* The logged-in name in the top bar links to your own profile. */
+.me-name {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.post-author:hover,
+.me-name:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+/* The top of a profile: navy with gold, like the site's dark "Academics" section. */
+.profile {
+  margin-bottom: 20px;
+  padding: 22px 24px 24px;
+  border-radius: 6px;
+  background: var(--navy);
+  color: #f4f1e8;
+}
+
+.profile-back {
+  color: #f4f1e8;
+  font-size: 15px;
+  text-decoration: none;
+  opacity: 0.85;
+}
+
+.profile-back:hover {
+  color: var(--gold);
+  opacity: 1;
+}
+
+.profile-name {
+  margin: 10px 0 2px;
+  color: var(--gold);
+  font-family: var(--serif);
+  font-size: 52px;
+  font-weight: 400;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.profile-facts {
+  margin: 0;
+  color: #d5dbe5;
+}
+
+/* In dark mode the page is navy too, so the profile gets a gold line to stand out. */
+@media (prefers-color-scheme: dark) {
+  .profile {
+    border: 1px solid var(--gold);
+  }
+}
+
+.empty {
+  color: var(--quiet);
+  font-style: italic;
+}

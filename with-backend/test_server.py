@@ -337,6 +337,22 @@ class ModelTests(unittest.TestCase):
                          [(2, "second, edited"), (3, "")])
 
 
+    # ---- Profiles ----
+
+    def test_a_profile_has_the_name_join_time_and_posts(self):
+        aiko = self.user("Aiko")
+        server.save_post(self.db_path, aiko, "first")
+        server.save_post(self.db_path, aiko, "second")
+        server.delete_post(self.db_path, aiko, 2)
+        row = server.profile(self.db_path, " aiko ")   # any capitals find the person
+        self.assertEqual((row["name"], row["posts"]), ("Aiko", 1))   # a deleted post does not count
+        self.assertRegex(row["joined_at"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
+
+    def test_a_profile_of_nobody_is_not_found(self):
+        for wrong in ["Nobody", "", None]:
+            with self.assertRaises(server.NotFound):
+                server.profile(self.db_path, wrong)
+
 class RealServerTest(unittest.TestCase):
 
     def setUp(self):
@@ -451,6 +467,14 @@ class RealServerTest(unittest.TestCase):
         status, answer = self.send(aiko, "POST", "/posts", {"text": ""})
         self.assertEqual(status, 400)
         self.assertIn("empty", answer["error"])
+
+
+    def test_a_profile_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.send(aiko, "POST", "/posts", {"text": "hello"})
+        status, answer = self.send(self.browser(), "GET", "/users?name=aiko")
+        self.assertEqual((status, answer["name"], answer["posts"]), (200, "Aiko", 1))
+        self.assertEqual(self.send(aiko, "GET", "/users?name=Nobody")[0], 404)
 
 
 if __name__ == "__main__":
