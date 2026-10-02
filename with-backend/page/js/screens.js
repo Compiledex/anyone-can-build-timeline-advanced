@@ -2,7 +2,7 @@
 // { title, breadcrumb, tabs, nodes }. main.js puts it on the page.
 
 import { icon } from "./icons.js";
-import { exploreLink, monthYear, profileLink } from "./format.js";
+import { exploreLink, monthYear, postLink, profileLink, shortTime } from "./format.js";
 import { avatar, element, emptyNote, link, postCard, thread } from "./render.js";
 import { byAuthor, isFollowed, isMe, isShown, newestFirst, repliesTo, state } from "./state.js";
 
@@ -35,6 +35,45 @@ export function homeScreen(address) {
     ],
     nodes: nodes,
   };
+}
+
+// ---- Notifications: what happened to you ----
+
+const TOLD = {
+  like: ["heart", "liked your post"],
+  repost: ["repost", "reposted your post"],
+  quote: ["edit", "quoted your post"],
+  reply: ["reply", "replied to you"],
+  mention: ["mail", "mentioned you"],
+  follow: ["user", "followed you"],
+};
+
+export function notificationsScreen() {
+  const nodes = state.notifications.map(notificationRow);
+  if (nodes.length === 0) {
+    nodes.push(emptyNote("Nothing yet", "When someone likes, reposts, quotes or replies to your posts, mentions you or follows you, you will see it here."));
+  }
+  return { title: "Notifications", breadcrumb: ["Timeline", "Notifications"], tabs: [], nodes: nodes };
+}
+
+function notificationRow(told) {
+  const [iconName, words] = TOLD[told.kind];
+  const row = link(told.kind === "follow" ? profileLink(told.actor) : postLink(told.post_id),
+                   "notification notification-" + told.kind + (told.read ? "" : " unread"));
+  const side = element("span", "notification-icon");
+  side.append(icon(iconName, told.kind === "like"));
+  const main = element("span", "notification-main");
+  main.append(avatar(told.actor, "small", false));
+  const line = element("span", "notification-line");
+  line.append(element("strong", "notification-actor", told.actor), document.createTextNode(" " + words),
+              element("span", "notification-time", " · " + shortTime(told.created_at)));
+  main.append(line);
+  const post = told.post_id === null ? null : state.posts.get(told.post_id);
+  if (post && post.text) {
+    main.append(element("span", "notification-text", post.text));
+  }
+  row.append(side, main);
+  return row;
 }
 
 // ---- Bookmarks: the posts you saved. Only you see them. ----

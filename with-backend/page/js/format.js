@@ -64,7 +64,7 @@ export function avatarColour(name) {
 //   #/@Ben          Ben's posts             #/@Ben/replies   Ben's replies
 //   #/post/12       post 12, with its replies
 //   #/explore       the search page        #/explore/%23kyoto  what a search for #kyoto found
-//   #/bookmarks     your saved posts
+//   #/bookmarks     your saved posts       #/notifications  what happened to you
 
 export function profileLink(name, tab = "") {
   return "#/@" + encodeURIComponent(name) + (tab ? "/" + tab : "");
@@ -96,8 +96,8 @@ export function readAddress() {
   if (parts[0].startsWith("@") && parts[0].length > 1) {
     return { screen: "profile", name: parts[0].slice(1), tab: parts[1] === "replies" ? "replies" : "posts" };
   }
-  if (parts[0] === "bookmarks") {
-    return { screen: "bookmarks" };
+  if (parts[0] === "bookmarks" || parts[0] === "notifications") {
+    return { screen: parts[0] };
   }
   if (parts[0] === "post" && /^\d+$/.test(parts[1] || "")) {
     return { screen: "post", id: Number(parts[1]) };

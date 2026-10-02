@@ -12,6 +12,8 @@ export const state = {
   replies: new Map(),     // post id → the replies to it, oldest first
   likes: new Map(),       // post id → { likes, you_liked }
   bookmarks: [],          // the ids of the posts you saved, the latest first
+  unreadNotifications: 0, // how many notifications you have not seen yet
+  notifications: [],      // your notifications, newest first, when the Notifications page is open
   profile: null,          // the profile on screen, as the server sent it
   search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
 };
@@ -37,6 +39,7 @@ export function setMe(person) {
   state.me = person.name;
   state.bio = person.bio || "";
   state.avatar = person.avatar || null;
+  state.unreadNotifications = person.unread_notifications || 0;
   state.following = new Set(person.following.map((name) => name.toLowerCase()));
 }
 

@@ -685,6 +685,65 @@ class ModelTests(unittest.TestCase):
         model.delete_post(self.db_path, aiko, 1)
         self.assertEqual(model.bookmarks_of(self.db_path, ben), [])
 
+    # ---- Notifications ----
+
+    def told(self, user_id):
+        """What this user was told, as (kind, who did it, post id), oldest first."""
+        rows = view.notifications_to_json(model.notifications_of(self.db_path, user_id))
+        return [(row["kind"], row["actor"], row["post_id"]) for row in reversed(rows)]
+
+    def test_likes_reposts_quotes_replies_mentions_and_follows_are_told(self):
+        aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
+        model.save_post(self.db_path, aiko, "hello")                      # 1
+        model.like_post(self.db_path, ben, 1)
+        model.repost(self.db_path, ben, 1)                                # 2
+        model.save_post(self.db_path, chen, "So true", quote_of=1)        # 3
+        model.save_post(self.db_path, ben, "hi!", reply_to=1)             # 4
+        model.save_post(self.db_path, chen, "Thanks @aiko and @Nobody")   # 5
+        model.follow(self.db_path, ben, "Aiko")
+        self.assertEqual(self.told(aiko), [("like", "Ben", 1), ("repost", "Ben", 1), ("quote", "Chen", 3),
+                                           ("reply", "Ben", 4), ("mention", "Chen", 5), ("follow", "Ben", None)])
+
+    def test_nobody_is_told_about_their_own_actions(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "hello")
+        model.like_post(self.db_path, aiko, 1)
+        model.save_post(self.db_path, aiko, "me again, @Aiko", reply_to=1)
+        self.assertEqual(self.told(aiko), [])
+
+    def test_undoing_takes_the_notification_back(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.like_post(self.db_path, ben, 1)
+        model.repost(self.db_path, ben, 1)
+        model.follow(self.db_path, ben, "Aiko")
+        model.unlike_post(self.db_path, ben, 1)
+        model.undo_repost(self.db_path, ben, 1)
+        model.unfollow(self.db_path, ben, "Aiko")
+        self.assertEqual(self.told(aiko), [])
+
+    def test_the_same_thing_is_told_once(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, ben, "hey @Aiko @aiko")             # 2
+        model.edit_post(self.db_path, ben, 2, "hey @Aiko!")
+        self.assertEqual(self.told(aiko), [("mention", "Ben", 2)])
+
+    def test_a_deleted_post_takes_its_notifications_with_it(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, ben, "hi @Aiko", reply_to=1)
+        model.delete_post(self.db_path, ben, 2)
+        self.assertEqual(self.told(aiko), [])
+
+    def test_unread_then_read(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.follow(self.db_path, ben, "Aiko")
+        self.assertEqual(model.unread_notifications(self.db_path, aiko), 1)
+        self.assertEqual(model.unread_notifications(self.db_path, ben), 0)   # each person's own
+        model.read_notifications(self.db_path, aiko)
+        self.assertEqual(model.unread_notifications(self.db_path, aiko), 0)
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -777,7 +836,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_sign_up_post_then_get(self):
         aiko = self.signed_up("Aiko")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
         status, post = self.send(aiko, "POST", "/posts", {"text": "hello"})
         self.assertEqual((status, post["author"]), (201, "Aiko"))
         status, posts = self.send(self.browser(), "GET", "/posts?after=0")  # anyone can read
@@ -794,7 +853,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_without_logging_in_you_can_read_but_not_write(self):
         stranger = self.browser()
-        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
         for method, path, data in [("POST", "/posts", {"text": "hello"}),
                                    ("POST", "/likes", {"post_id": 1}),
                                    ("PUT", "/posts", {"post_id": 1, "text": "hi"}),
@@ -806,12 +865,12 @@ class RealServerTest(unittest.TestCase):
     def test_log_out_then_log_in(self):
         aiko = self.signed_up("Aiko")
         self.send(aiko, "POST", "/logout")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
         self.assertEqual(self.send(aiko, "POST", "/posts", {"text": "hello"})[0], 401)
         status, _ = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": "wrong one"})
         self.assertEqual(status, 400)
         status, me = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": PASSWORD})
-        self.assertEqual((status, me), (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
+        self.assertEqual((status, me), (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
 
     def test_like_unlike_and_who_liked(self):
         aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
@@ -862,11 +921,11 @@ class RealServerTest(unittest.TestCase):
         self.signed_up("Ben")
         self.assertEqual(self.send(self.browser(), "POST", "/follows", {"name": "Ben"})[0], 401)
         self.assertEqual(self.send(aiko, "POST", "/follows", {"name": "ben"}),
-                         (201, {"name": "Aiko", "bio": "", "avatar": None, "following": ["Ben"]}))
+                         (201, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": ["Ben"]}))
         self.assertTrue(self.send(aiko, "GET", "/users?name=Ben")[1]["you_follow"])
         self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
         self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
-                         (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
+                         (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
 
 
     def open_events(self):
@@ -1001,6 +1060,19 @@ class RealServerTest(unittest.TestCase):
         self.assertEqual(self.send(ben, "POST", "/bookmarks", {"post_id": 1}), (201, {"post_ids": [1]}))
         self.assertEqual(self.send(aiko, "GET", "/bookmarks"), (200, {"post_ids": []}))
         self.assertEqual(self.send(ben, "DELETE", "/bookmarks", {"post_id": 1}), (200, {"post_ids": []}))
+
+
+    def test_notifications_over_http(self):
+        aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
+        self.send(ben, "POST", "/follows", {"name": "Aiko"})
+        self.assertEqual(self.send(self.browser(), "GET", "/notifications")[0], 401)
+        self.assertEqual(self.send(aiko, "GET", "/me")[1]["unread_notifications"], 1)
+        status, told = self.send(aiko, "GET", "/notifications")
+        self.assertEqual((status, [(n["kind"], n["actor"], n["read"]) for n in told]),
+                         (200, [("follow", "Ben", False)]))
+        self.assertEqual(self.send(ben, "GET", "/notifications"), (200, []))   # not Aiko's
+        status, me = self.send(aiko, "POST", "/notifications/read")
+        self.assertEqual((status, me["unread_notifications"]), (200, 0))
 
 
 if __name__ == "__main__":

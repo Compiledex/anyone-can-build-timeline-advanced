@@ -12,7 +12,8 @@ import { fillIcons } from "./icons.js";
 import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
 import {
-  bookmarksScreen, exploreScreen, homeScreen, postScreen, profileHandlers, profileScreen, sidebar,
+  bookmarksScreen, exploreScreen, homeScreen, notificationsScreen, postScreen, profileHandlers, profileScreen,
+  sidebar,
 } from "./screens.js";
 import {
   addPosts, changed, isBookmarked, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
@@ -42,6 +43,7 @@ const joinBar = document.getElementById("join-bar");
 
 const SCREENS = {
   home: homeScreen, post: postScreen, profile: profileScreen, explore: exploreScreen, bookmarks: bookmarksScreen,
+  notifications: notificationsScreen,
 };
 const searchForm = document.getElementById("search-form");
 const searchBox = document.getElementById("search-box");
@@ -55,7 +57,9 @@ function draw() {
     ? document.activeElement.dataset.focus
     : undefined;
 
-  document.title = shown.title === "Home" ? "Timeline" : shown.title + " · Timeline";
+  // As on the real thing: "(3) Timeline" when there are 3 notifications you have not seen.
+  const unread = state.unreadNotifications > 0 ? "(" + state.unreadNotifications + ") " : "";
+  document.title = unread + (shown.title === "Home" ? "Timeline" : shown.title + " · Timeline");
   pageTitle.textContent = shown.title;
   breadcrumb.replaceChildren();
   shown.breadcrumb.forEach((part, index) => {
@@ -104,6 +108,11 @@ function drawMenu(address) {
   for (const item of document.querySelectorAll("[data-needs-login]")) {
     item.hidden = !loggedIn;
   }
+  const badge = document.getElementById("nav-badge");
+  badge.hidden = state.unreadNotifications === 0;
+  badge.textContent = state.unreadNotifications > 99 ? "99+" : String(state.unreadNotifications);
+  badge.parentElement.parentElement.setAttribute("aria-label", state.unreadNotifications > 0
+    ? "Notifications, " + state.unreadNotifications + " new" : "Notifications");
   document.getElementById("nav-profile").hidden = !loggedIn;
   document.getElementById("nav-post").hidden = !loggedIn;
   document.getElementById("nav-me").hidden = !loggedIn;
@@ -138,6 +147,21 @@ async function checkLikes() {
 
 async function checkBookmarks() {
   state.bookmarks = state.me === null ? [] : (await get("/bookmarks")).post_ids;
+}
+
+// On the Notifications page: fetch them, then mark them read. They stay marked "new" on the
+// screen until the next visit, so you can see which ones you had not seen.
+async function checkNotifications() {
+  if (readAddress().screen !== "notifications" || state.me === null) {
+    return;
+  }
+  state.notifications = await get("/notifications");
+  if (state.notifications.some((told) => !told.read)) {
+    const { answer } = await send("POST", "/notifications/read");
+    if (answer) {
+      setMe(answer);
+    }
+  }
 }
 
 async function checkChanges() {
@@ -198,6 +222,7 @@ async function catchUp() {
       await checkChanges();
       await checkProfile();
       await checkSearch();
+      await checkNotifications();
       if (document.getElementById("status").textContent === CANNOT_REACH) {
         showStatus("");
       }
@@ -379,6 +404,7 @@ async function addressChanged() {
   window.scrollTo(0, 0);
   await checkProfile().catch(() => {});
   await checkSearch();
+  await checkNotifications().catch(() => {});
   changed();
 }
 

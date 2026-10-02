@@ -16,8 +16,9 @@ def people_to_json(rows):
     return [{"name": row["name"], "avatar": upload_url(row["avatar_file"])} for row in rows]
 
 
-def me_to_json(user, following=()):
+def me_to_json(user, following=(), unread_notifications=0):
     return {"name": user["name"] if user else None,
+            "unread_notifications": unread_notifications,
             "bio": user["bio"] if user else "",
             "avatar": upload_url(user["avatar_file"]) if user else None,
             "following": [row["name"] for row in following]}
@@ -64,3 +65,8 @@ def search_to_json(post_ids, people):
 
 def bookmarks_to_json(post_ids):
     return {"post_ids": post_ids}
+
+
+def notifications_to_json(rows):
+    return [{"id": row["id"], "kind": row["kind"], "actor": row["actor"], "post_id": row["post_id"],
+             "created_at": row["created_at"], "read": row["read_at"] is not None} for row in rows]

@@ -262,6 +262,29 @@ a:hover {
   white-space: nowrap;
 }
 
+/* The red number on the bell. */
+.nav-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid var(--background);
+  border-radius: 9999px;
+  background: var(--warning);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* ---- The header of the middle column: a breadcrumb, the title with the site's lines, tabs ---- */
 
 .center-header {
@@ -437,6 +460,72 @@ a:hover {
 .person-bio {
   margin-top: 2px;
   overflow-wrap: anywhere;
+}
+
+/* A notification: an icon in its own colour, then who did it, and the post it is about.
+   New ones sit on the site's pale blue-grey. */
+.notification {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.notification:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.notification.unread {
+  background: var(--pale-box);
+}
+
+.notification-icon {
+  display: flex;
+  justify-content: flex-end;
+  width: 44px;
+  color: var(--brand);
+}
+
+.notification-icon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.notification-like .notification-icon {
+  color: var(--like);
+}
+
+.notification-repost .notification-icon,
+.notification-quote .notification-icon {
+  color: var(--number);
+}
+
+.notification-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.notification-actor {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 18px;
+}
+
+.notification-time {
+  color: var(--quiet);
+}
+
+.notification-text {
+  overflow: hidden;
+  color: var(--quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* #tags, @names and web addresses inside a post. */

@@ -11,6 +11,7 @@ The tables:
   uploads   each uploaded picture; the file itself is in the uploads folder
   post_tags each #tag in each post, so that tags can be found fast
   bookmarks each person's saved posts; only they can see them
+  notifications  what happened to each person; only they can see theirs
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -148,6 +149,19 @@ def create_tables(db_path):
     # so that a repost can be undone and done again. Even code that skips the model cannot break it.
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_repost_each ON posts (author_id, repost_of) "
                        "WHERE repost_of IS NOT NULL AND deleted_at IS NULL")
+    # What happened to each person: someone liked, reposted, quoted or replied to their post,
+    # mentioned them, or followed them. post_id is the post it is about (empty for a follow).
+    connection.execute("CREATE TABLE IF NOT EXISTS notifications ("
+                       "id INTEGER PRIMARY KEY, "
+                       "user_id INTEGER NOT NULL REFERENCES users(id), "      # who it is for
+                       "actor_id INTEGER NOT NULL REFERENCES users(id), "     # who did it
+                       "kind TEXT NOT NULL CHECK (kind IN "
+                       "('like', 'repost', 'quote', 'reply', 'mention', 'follow')), "
+                       "post_id INTEGER REFERENCES posts(id), "
+                       "created_at TEXT NOT NULL, read_at TEXT)")
+    # The same thing is told only once, even if it is done, undone and done again.
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_notification_each ON notifications "
+                       "(user_id, actor_id, kind, IFNULL(post_id, 0))")
     # Each person's saved posts. Only they can see them.
     connection.execute("CREATE TABLE IF NOT EXISTS bookmarks ("
                        "user_id INTEGER NOT NULL REFERENCES users(id), "
@@ -413,6 +427,7 @@ def follow(db_path, user_id, name):
         except sqlite3.IntegrityError:
             # The primary key refused a second row for the same pair.
             raise RuleBroken(f"You already follow {person['name']}.")
+        notify(connection, person["id"], user_id, "follow")
         connection.commit()
     finally:
         connection.close()
@@ -427,6 +442,7 @@ def unfollow(db_path, user_id, name):
                                     (user_id, person["id"]))
         if cursor.rowcount == 0:
             raise RuleBroken(f"You do not follow {person['name']}.")
+        unnotify(connection, person["id"], user_id, "follow")
         connection.commit()
     finally:
         connection.close()
@@ -575,19 +591,28 @@ def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=
         raise RuleBroken("A post can answer a post or quote one, not both.")
     connection = connect(db_path)
     try:
+        answered = quoted = None
         if reply_to is not None:
-            reply_to = find_original(connection, reply_to, "reply_to")["id"]
+            answered = find_original(connection, reply_to, "reply_to")
+            reply_to = answered["id"]
         if quote_of is not None:
-            quote_of = find_original(connection, quote_of, "quote_of")["id"]
+            quoted = find_original(connection, quote_of, "quote_of")
+            quote_of = quoted["id"]
         if picture_id is not None:
             find_unused_upload(connection, picture_id, user_id)
         cursor = connection.execute(
             "INSERT INTO posts (author_id, text, posted_at, reply_to, picture_id, quote_of) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (user_id, text, posted_at or now(), reply_to, picture_id, quote_of))
-        save_tags(connection, cursor.lastrowid, text)
+        new_id = cursor.lastrowid
+        save_tags(connection, new_id, text)
+        if answered:
+            notify(connection, answered["author_id"], user_id, "reply", new_id)
+        if quoted:
+            notify(connection, quoted["author_id"], user_id, "quote", new_id)
+        notify_mentions(connection, user_id, new_id, text)
         connection.commit()
-        return find_post(connection, cursor.lastrowid)
+        return find_post(connection, new_id)
     finally:
         connection.close()
 
@@ -605,6 +630,7 @@ def edit_post(db_path, user_id, post_id, text):
         connection.execute("UPDATE posts SET text = ?, edited_at = ? WHERE id = ?",
                            (text, now(), post_id))
         save_tags(connection, post_id, text)
+        notify_mentions(connection, user_id, post_id, text)   # only new @names hear of it
         connection.commit()
         return find_post(connection, post_id)
     finally:
@@ -624,6 +650,7 @@ def delete_post(db_path, user_id, post_id):
         connection.execute("DELETE FROM likes WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM post_tags WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM bookmarks WHERE post_id = ?", (post_id,))
+        connection.execute("DELETE FROM notifications WHERE post_id = ?", (post_id,))
         connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ?, "
                            "picture_id = NULL WHERE id = ?", (now(), post_id))
         if post["picture_id"] is not None:
@@ -698,6 +725,7 @@ def repost(db_path, user_id, post_id, posted_at=None):
         except sqlite3.IntegrityError:
             # The index one_repost_each refused a second live repost of this post by this user.
             raise RuleBroken("You already reposted this post.")
+        notify(connection, original["author_id"], user_id, "repost", original["id"])
         connection.commit()
         return find_post(connection, cursor.lastrowid)
     finally:
@@ -715,6 +743,7 @@ def undo_repost(db_path, user_id, post_id):
         if mine is None:
             raise RuleBroken("You have not reposted this post.")
         connection.execute("UPDATE posts SET deleted_at = ? WHERE id = ?", (now(), mine["id"]))
+        unnotify(connection, original["author_id"], user_id, "repost", original["id"])
         connection.commit()
         return connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id = ?", (mine["id"],)).fetchone()
     finally:
@@ -737,6 +766,60 @@ def changed_posts(db_path):
                               "OR posts.deleted_at IS NOT NULL ORDER BY posts.id").fetchall()
     connection.close()
     return rows
+
+
+# ---- Notifications ----
+
+def notify(connection, user_id, actor_id, kind, post_id=None):
+    """Tell user_id that actor_id did something. Nobody is told about their own actions,
+    and the same thing is told only once."""
+    if user_id == actor_id:
+        return
+    connection.execute("INSERT OR IGNORE INTO notifications (user_id, actor_id, kind, post_id, created_at) "
+                       "VALUES (?, ?, ?, ?, ?)", (user_id, actor_id, kind, post_id, now()))
+
+
+def unnotify(connection, user_id, actor_id, kind, post_id=None):
+    """Take a notification back, when its action is undone (an unlike, an unfollow)."""
+    connection.execute("DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND kind = ? "
+                       "AND IFNULL(post_id, 0) = IFNULL(?, 0)", (user_id, actor_id, kind, post_id))
+
+
+def notify_mentions(connection, author_id, post_id, text):
+    """Tell each person named with @ in the text. A name nobody has is skipped."""
+    for name in mentions_in(text):
+        person = connection.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
+        if person is not None:
+            notify(connection, person["id"], author_id, "mention", post_id)
+
+
+def notifications_of(db_path, user_id):
+    """This user's notifications, newest first, with who did it. Only ever this user's own."""
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT notifications.id, notifications.kind, users.name AS actor, notifications.post_id, "
+        "notifications.created_at, notifications.read_at FROM notifications "
+        "JOIN users ON users.id = notifications.actor_id WHERE notifications.user_id = ? "
+        "ORDER BY notifications.id DESC LIMIT 100", (user_id,)).fetchall()
+    connection.close()
+    return rows
+
+
+def unread_notifications(db_path, user_id):
+    connection = connect(db_path)
+    count = connection.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+                               (user_id,)).fetchone()[0]
+    connection.close()
+    return count
+
+
+def read_notifications(db_path, user_id):
+    """Mark all of this user's notifications as read."""
+    connection = connect(db_path)
+    connection.execute("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL",
+                       (now(), user_id))
+    connection.commit()
+    connection.close()
 
 
 # ---- Bookmarks ----
@@ -787,13 +870,15 @@ def like_post(db_path, user_id, post_id):
     """Check the rules, save the like, and return every post's likes, as like_counts does."""
     connection = connect(db_path)
     try:
-        post_id = find_original(connection, post_id)["id"]
+        post = find_original(connection, post_id)
+        post_id = post["id"]
         try:
             connection.execute("INSERT INTO likes (post_id, user_id) VALUES (?, ?)",
                                (post_id, user_id))
         except sqlite3.IntegrityError:
             # The primary key refused a second row for this post and this user.
             raise RuleBroken("You already liked this post.")
+        notify(connection, post["author_id"], user_id, "like", post_id)
         connection.commit()
     finally:
         connection.close()
@@ -804,11 +889,13 @@ def unlike_post(db_path, user_id, post_id):
     """Check the rules, remove the like, and return every post's likes, as like_counts does."""
     connection = connect(db_path)
     try:
-        post_id = find_original(connection, post_id)["id"]
+        post = find_original(connection, post_id)
+        post_id = post["id"]
         cursor = connection.execute("DELETE FROM likes WHERE post_id = ? AND user_id = ?",
                                     (post_id, user_id))
         if cursor.rowcount == 0:
             raise RuleBroken("You have not liked this post.")
+        unnotify(connection, post["author_id"], user_id, "like", post_id)
         connection.commit()
     finally:
         connection.close()
