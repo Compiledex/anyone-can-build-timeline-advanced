@@ -178,7 +178,7 @@ Makefile             make run · make test · make reset
 .claude/launch.json  starts the backend version from the Claude Code desktop app
 page-only/           open index.html; nothing to start
   index.html  style.css  app.js
-with-backend/        make run, then http://localhost:8009
+with-backend/        make run, then http://localhost:8010
   index.html  style.css  app.js
   server.py          controller · model · view, labelled
   test_server.py     unittest: the rules, saving, "after", likes, replies, edits, deletes, real round trips

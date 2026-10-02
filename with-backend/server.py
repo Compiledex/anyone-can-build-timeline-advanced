@@ -1,4 +1,4 @@
-"""Timeline: the backend. Start it with `python3 server.py`, then open http://localhost:8009
+"""Timeline: the backend. Start it with `python3 server.py`, then open http://localhost:8010
 
 This file has three parts:
   CONTROLLER  reads each request and decides what to do
@@ -435,7 +435,7 @@ def make_server(port, db_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the Timeline server.")
-    parser.add_argument("--port", type=int, default=8009)
+    parser.add_argument("--port", type=int, default=8010)
     port = parser.parse_args().port
     server = make_server(port, DB_PATH)
     print("Timeline is running at http://localhost:" + str(port))

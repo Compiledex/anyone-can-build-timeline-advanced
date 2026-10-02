@@ -41,7 +41,7 @@ The three parts of `server.py`:
 ## How to run it
 
 - Page-only: open `page-only/index.html` in a browser. Nothing to start.
-- With a backend: `make run`, then open <http://localhost:8009>. Press Ctrl+C to stop.
+- With a backend: `make run`, then open <http://localhost:8010>. Press Ctrl+C to stop.
 - Start again with an empty timeline: `make reset`.
 - See what is saved: `sqlite3 with-backend/timeline.db 'select * from users; select * from posts; select * from likes'`
 
