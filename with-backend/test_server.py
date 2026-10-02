@@ -15,6 +15,7 @@ import unittest
 import urllib.error
 import urllib.request
 
+import seed
 import server
 
 PASSWORD = "correct horse"
@@ -418,6 +419,42 @@ class BellTests(unittest.TestCase):
     def test_without_a_ring_the_wait_ends_after_the_timeout(self):
         bell = server.Bell()
         self.assertEqual(bell.wait(0, timeout=0.05), 0)
+
+
+class SeedTests(unittest.TestCase):
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.folder.name, "test.db")
+        self.rounds = server.PASSWORD_ROUNDS
+        server.PASSWORD_ROUNDS = 1000
+
+    def tearDown(self):
+        server.PASSWORD_ROUNDS = self.rounds
+        self.folder.cleanup()
+
+    def test_seed_makes_a_lively_timeline(self):
+        made = seed.seed(self.db_path)
+        self.assertEqual(made["people"], len(seed.PEOPLE))
+        self.assertGreater(made["likes"], 0)
+        self.assertGreater(made["follows"], 0)
+        rows = server.posts_to_json(server.posts_after(self.db_path, 0))
+        self.assertEqual(len(rows), len(seed.POSTS))
+        self.assertTrue(any(row["reply_to"] for row in rows))
+        self.assertEqual(len([row for row in rows if row["deleted_at"]]), len(seed.DELETES))
+        self.assertEqual(len([row for row in rows if row["edited_at"]]), len(seed.EDITS))
+        times = [row["posted_at"] for row in rows]
+        self.assertEqual(times, sorted(times))   # oldest first, as the ids are
+
+    def test_a_made_up_person_can_log_in(self):
+        seed.seed(self.db_path)
+        token = server.log_in(self.db_path, "Aiko", seed.PASSWORD)
+        self.assertEqual(server.user_for_token(self.db_path, token)["name"], "Aiko")
+
+    def test_seed_refuses_a_timeline_that_is_not_empty(self):
+        seed.seed(self.db_path)
+        with self.assertRaises(SystemExit):
+            seed.seed(self.db_path)
 
 
 class RealServerTest(unittest.TestCase):

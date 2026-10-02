@@ -447,8 +447,11 @@ def start_session(connection, user_id):
     return token
 
 
-def sign_up(db_path, name, password):
-    """Check the rules, add the user, log them in, and return the session token."""
+def sign_up(db_path, name, password, joined_at=None):
+    """Check the rules, add the user, log them in, and return the session token.
+
+    joined_at is None for now; seed.py gives an earlier time for its made-up people.
+    """
     name = check_name(name)
     password = check_password(password)
     connection = connect(db_path)
@@ -456,7 +459,7 @@ def sign_up(db_path, name, password):
         try:
             user_id = connection.execute(
                 "INSERT INTO users (name, password_hash, joined_at) VALUES (?, ?, ?)",
-                (name, hash_password(password), now())).lastrowid
+                (name, hash_password(password), joined_at or now())).lastrowid
         except sqlite3.IntegrityError:
             # The UNIQUE rule on users.name refused a second user with this name.
             raise RuleBroken(f"The name {name} is taken. Pick another name, or log in.")
