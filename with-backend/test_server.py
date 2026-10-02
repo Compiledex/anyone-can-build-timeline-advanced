@@ -851,6 +851,25 @@ class SeedTests(unittest.TestCase):
         times = [row["posted_at"] for row in rows]
         self.assertEqual(times, sorted(times))   # oldest first, as the ids are
 
+    def test_the_made_up_data_has_every_kind_of_thing(self):
+        seed.seed(self.db_path)
+        aiko = model.log_in(self.db_path, "Aiko", seed.PASSWORD)
+        aiko_id = model.user_for_token(self.db_path, aiko)["id"]
+        rows = view.posts_to_json(model.posts_after(self.db_path, 0))
+        self.assertTrue(any(row["repost_of"] for row in rows))
+        self.assertTrue(any(row["quote_of"] for row in rows))
+        self.assertTrue(model.trends(self.db_path))
+        self.assertTrue(model.profile(self.db_path, "Aiko")["bio"])
+        self.assertTrue(model.bookmarks_of(self.db_path, aiko_id))
+        self.assertTrue(model.conversations(self.db_path, aiko_id))
+        self.assertTrue(model.notifications_of(self.db_path, aiko_id))
+        self.assertGreater(model.unread_messages(self.db_path, aiko_id), 0)   # something new to see
+
+    def test_the_seed_puts_the_real_clock_back(self):
+        real_now = model.now
+        seed.seed(self.db_path)
+        self.assertIs(model.now, real_now)
+
     def test_a_made_up_person_can_log_in(self):
         seed.seed(self.db_path)
         token = model.log_in(self.db_path, "Aiko", seed.PASSWORD)

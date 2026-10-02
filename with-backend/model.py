@@ -852,11 +852,12 @@ def unread_notifications(db_path, user_id):
     return count
 
 
-def read_notifications(db_path, user_id):
-    """Mark all of this user's notifications as read."""
+def read_notifications(db_path, user_id, before=None):
+    """Mark all of this user's notifications as read
+    (only those made up to `before`, when it is given; seed.py uses that)."""
     connection = connect(db_path)
-    connection.execute("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL",
-                       (now(), user_id))
+    connection.execute("UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL "
+                       "AND (? IS NULL OR created_at <= ?)", (now(), user_id, before, before))
     connection.commit()
     connection.close()
 
@@ -925,13 +926,15 @@ def conversation(db_path, user_id, with_name):
         connection.close()
 
 
-def read_conversation(db_path, user_id, with_name):
-    """Mark the messages this user got from the other person as read."""
+def read_conversation(db_path, user_id, with_name, before=None):
+    """Mark the messages this user got from the other person as read
+    (only those sent up to `before`, when it is given; seed.py uses that)."""
     connection = connect(db_path)
     try:
         person = find_user(connection, with_name)
         connection.execute("UPDATE messages SET read_at = ? WHERE sender_id = ? AND receiver_id = ? "
-                           "AND read_at IS NULL", (now(), person["id"], user_id))
+                           "AND read_at IS NULL AND (? IS NULL OR sent_at <= ?)",
+                           (now(), person["id"], user_id, before, before))
         connection.commit()
     finally:
         connection.close()
