@@ -5,7 +5,7 @@
 import { icon } from "./icons.js";
 import { avatarColour, exploreLink, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
 import {
-  avatarOf, isMe, isShown, likesOf, replyCount, repliesTo, repostCount, state, youReposted,
+  avatarOf, isBookmarked, isMe, isShown, likesOf, replyCount, repliesTo, repostCount, state, youReposted,
 } from "./state.js";
 
 // What the buttons on a post do. main.js fills these in.
@@ -13,6 +13,7 @@ export const handlers = {
   reply: (postId) => {},
   like: (postId) => {},
   repost: (postId, undo) => {},
+  bookmark: (postId) => {},
   quote: (postId) => {},
   edit: (postId) => {},
   remove: (postId) => {},
@@ -202,7 +203,7 @@ function quoteBox(quoted) {
   return box;
 }
 
-// The row of buttons under a post: reply, repost and like, each with its count.
+// The row of buttons under a post: reply, repost and like, each with its count, and bookmark.
 function actionBar(post, focusPrefix) {
   const bar = element("div", "post-actions");
   const replies = replyCount(post.id);
@@ -211,6 +212,9 @@ function actionBar(post, focusPrefix) {
   const likes = likesOf(post.id);
   bar.append(actionButton(focusPrefix, post.id, "heart", likes.you_liked, likes.likes,
                           likes.you_liked ? "Unlike" : "Like", () => handlers.like(post.id)));
+  const saved = isBookmarked(post.id);
+  bar.append(actionButton(focusPrefix, post.id, "bookmark", saved, 0,
+                          saved ? "Remove from Bookmarks" : "Bookmark", () => handlers.bookmark(post.id)));
   return bar;
 }
 
@@ -247,7 +251,7 @@ function actionButton(focusPrefix, postId, iconName, active, count, label, onCli
   button.type = "button";
   button.dataset.focus = focusPrefix + iconName + "-" + postId;   // so the keyboard stays here after a redraw
   button.setAttribute("aria-label", label + (count ? " (" + count + ")" : ""));
-  if (iconName === "heart") {
+  if (iconName === "heart" || iconName === "bookmark") {
     button.setAttribute("aria-pressed", active);
   }
   button.append(icon(iconName, active), element("span", "action-count", count > 0 ? String(count) : ""));

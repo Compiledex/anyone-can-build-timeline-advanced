@@ -234,6 +234,23 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def get_changes(self, query):
         self.send_json(200, view.posts_to_json(model.changed_posts(self.db)))
 
+    # ---- Bookmarks: always the logged-in person's own ----
+
+    def get_bookmarks(self, query):
+        user = self.logged_in_user()
+        self.send_json(200, view.bookmarks_to_json(model.bookmarks_of(self.db, user["id"])))
+
+    def post_bookmarks(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        self.send_json(201, view.bookmarks_to_json(model.bookmark(self.db, user["id"], data.get("post_id"))))
+
+    def delete_bookmarks(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        self.send_json(200, view.bookmarks_to_json(
+            model.remove_bookmark(self.db, user["id"], data.get("post_id"))))
+
     # ---- Likes ----
 
     def get_likes(self, query):
@@ -321,7 +338,7 @@ class TimelineHandler(BaseHTTPRequestHandler):
         # Printing all of those questions would fill the screen, so they are not printed.
         if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
                                                            "/users", "/events", "/people",
-                                                           "/uploads")):
+                                                           "/uploads", "/search", "/bookmarks")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
@@ -362,6 +379,9 @@ ROUTES = {
     ("POST", "/reposts"): TimelineHandler.post_reposts,
     ("DELETE", "/reposts"): TimelineHandler.delete_reposts,
     ("GET", "/changes"): TimelineHandler.get_changes,
+    ("GET", "/bookmarks"): TimelineHandler.get_bookmarks,
+    ("POST", "/bookmarks"): TimelineHandler.post_bookmarks,
+    ("DELETE", "/bookmarks"): TimelineHandler.delete_bookmarks,
     ("GET", "/likes"): TimelineHandler.get_likes,
     ("POST", "/likes"): TimelineHandler.post_likes,
     ("DELETE", "/likes"): TimelineHandler.delete_likes,

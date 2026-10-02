@@ -37,6 +37,19 @@ export function homeScreen(address) {
   };
 }
 
+// ---- Bookmarks: the posts you saved. Only you see them. ----
+
+export function bookmarksScreen() {
+  const posts = state.bookmarks.map((id) => state.posts.get(id)).filter((post) => post && !post.deleted_at);
+  const nodes = posts.map((post) => postCard(post, { replyingTo: true }));
+  if (state.me === null) {
+    nodes.push(emptyNote("Log in to see your bookmarks"));
+  } else if (nodes.length === 0) {
+    nodes.push(emptyNote("Save posts for later", "Press 🔖 under a post to save it here. Only you can see your bookmarks."));
+  }
+  return { title: "Bookmarks", breadcrumb: ["Timeline", "Bookmarks"], tabs: [], nodes: nodes };
+}
+
 // ---- Explore: search for posts, people and #tags ----
 
 export function exploreScreen(address) {

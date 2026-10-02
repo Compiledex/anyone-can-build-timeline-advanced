@@ -962,6 +962,14 @@ a:hover {
   max-height: 260px;
 }
 
+.action-bookmark {
+  min-width: 0;
+}
+
+.action-bookmark.active {
+  color: var(--brand);
+}
+
 /* "⋯" on your own posts, with Edit and Delete. */
 .post-menu {
   position: relative;

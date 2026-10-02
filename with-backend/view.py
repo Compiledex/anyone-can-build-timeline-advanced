@@ -60,3 +60,7 @@ def search_to_json(post_ids, people):
     return {"post_ids": post_ids,
             "people": [{"name": row["name"], "bio": row["bio"], "avatar": upload_url(row["avatar_file"])}
                        for row in people]}
+
+
+def bookmarks_to_json(post_ids):
+    return {"post_ids": post_ids}

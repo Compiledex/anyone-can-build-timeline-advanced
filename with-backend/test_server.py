@@ -658,6 +658,33 @@ class ModelTests(unittest.TestCase):
         model.create_tables(self.db_path)
         self.assertEqual(model.search(self.db_path, "#nara")[0], [1])
 
+    # ---- Bookmarks ----
+
+    def test_save_and_unsave_posts(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "first")
+        model.save_post(self.db_path, aiko, "second")
+        model.bookmark(self.db_path, ben, 1)
+        self.assertEqual(model.bookmark(self.db_path, ben, 2), [2, 1])   # the latest saved first
+        with self.assertRaises(model.RuleBroken):
+            model.bookmark(self.db_path, ben, 1)
+        self.assertEqual(model.remove_bookmark(self.db_path, ben, 1), [2])
+        with self.assertRaises(model.RuleBroken):
+            model.remove_bookmark(self.db_path, ben, 1)
+
+    def test_bookmarks_are_each_persons_own(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.bookmark(self.db_path, ben, 1)
+        self.assertEqual(model.bookmarks_of(self.db_path, aiko), [])
+
+    def test_a_deleted_post_leaves_the_bookmarks(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.bookmark(self.db_path, ben, 1)
+        model.delete_post(self.db_path, aiko, 1)
+        self.assertEqual(model.bookmarks_of(self.db_path, ben), [])
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -965,6 +992,15 @@ class RealServerTest(unittest.TestCase):
         status, found = self.send(self.browser(), "GET", "/search?q=aik")
         self.assertEqual(found["people"], [{"name": "Aiko", "bio": "", "avatar": None}])
         self.assertEqual(self.send(self.browser(), "GET", "/search?q=")[0], 400)
+
+
+    def test_bookmarks_over_http(self):
+        aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
+        self.send(aiko, "POST", "/posts", {"text": "hello"})
+        self.assertEqual(self.send(self.browser(), "GET", "/bookmarks")[0], 401)
+        self.assertEqual(self.send(ben, "POST", "/bookmarks", {"post_id": 1}), (201, {"post_ids": [1]}))
+        self.assertEqual(self.send(aiko, "GET", "/bookmarks"), (200, {"post_ids": []}))
+        self.assertEqual(self.send(ben, "DELETE", "/bookmarks", {"post_id": 1}), (200, {"post_ids": []}))
 
 
 if __name__ == "__main__":

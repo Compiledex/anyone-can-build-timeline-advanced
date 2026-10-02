@@ -10,6 +10,7 @@ The tables:
   follows   one row for each person and someone they follow
   uploads   each uploaded picture; the file itself is in the uploads folder
   post_tags each #tag in each post, so that tags can be found fast
+  bookmarks each person's saved posts; only they can see them
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -147,6 +148,11 @@ def create_tables(db_path):
     # so that a repost can be undone and done again. Even code that skips the model cannot break it.
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_repost_each ON posts (author_id, repost_of) "
                        "WHERE repost_of IS NOT NULL AND deleted_at IS NULL")
+    # Each person's saved posts. Only they can see them.
+    connection.execute("CREATE TABLE IF NOT EXISTS bookmarks ("
+                       "user_id INTEGER NOT NULL REFERENCES users(id), "
+                       "post_id INTEGER NOT NULL REFERENCES posts(id), saved_at TEXT NOT NULL, "
+                       "PRIMARY KEY (user_id, post_id))")
     # Each #tag in each post, in small letters, so that a tag can be found fast.
     connection.execute("CREATE TABLE IF NOT EXISTS post_tags ("
                        "post_id INTEGER NOT NULL REFERENCES posts(id), tag TEXT NOT NULL, "
@@ -617,6 +623,7 @@ def delete_post(db_path, user_id, post_id):
             raise RuleBroken("You can only delete your own post.")
         connection.execute("DELETE FROM likes WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM post_tags WHERE post_id = ?", (post_id,))
+        connection.execute("DELETE FROM bookmarks WHERE post_id = ?", (post_id,))
         connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ?, "
                            "picture_id = NULL WHERE id = ?", (now(), post_id))
         if post["picture_id"] is not None:
@@ -730,6 +737,48 @@ def changed_posts(db_path):
                               "OR posts.deleted_at IS NOT NULL ORDER BY posts.id").fetchall()
     connection.close()
     return rows
+
+
+# ---- Bookmarks ----
+
+def bookmark(db_path, user_id, post_id):
+    """Check the rules, save the post in this user's bookmarks, and return them all."""
+    connection = connect(db_path)
+    try:
+        post_id = find_original(connection, post_id)["id"]
+        try:
+            connection.execute("INSERT INTO bookmarks (user_id, post_id, saved_at) VALUES (?, ?, ?)",
+                               (user_id, post_id, now()))
+        except sqlite3.IntegrityError:
+            raise RuleBroken("You already saved this post.")
+        connection.commit()
+    finally:
+        connection.close()
+    return bookmarks_of(db_path, user_id)
+
+
+def remove_bookmark(db_path, user_id, post_id):
+    """Check the rules, take the post out of this user's bookmarks, and return the rest."""
+    connection = connect(db_path)
+    try:
+        post_id = find_original(connection, post_id)["id"]
+        cursor = connection.execute("DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?",
+                                    (user_id, post_id))
+        if cursor.rowcount == 0:
+            raise RuleBroken("You have not saved this post.")
+        connection.commit()
+    finally:
+        connection.close()
+    return bookmarks_of(db_path, user_id)
+
+
+def bookmarks_of(db_path, user_id):
+    """The ids of the posts this user saved, the latest saved first. Only ever this user's."""
+    connection = connect(db_path)
+    rows = connection.execute("SELECT post_id FROM bookmarks WHERE user_id = ? "
+                              "ORDER BY saved_at DESC, rowid DESC", (user_id,)).fetchall()
+    connection.close()
+    return [row["post_id"] for row in rows]
 
 
 # ---- Likes ----

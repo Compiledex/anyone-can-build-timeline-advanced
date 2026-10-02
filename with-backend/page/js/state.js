@@ -11,6 +11,7 @@ export const state = {
   lastId: 0,              // the id of the newest post this window has
   replies: new Map(),     // post id → the replies to it, oldest first
   likes: new Map(),       // post id → { likes, you_liked }
+  bookmarks: [],          // the ids of the posts you saved, the latest first
   profile: null,          // the profile on screen, as the server sent it
   search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
 };
@@ -82,6 +83,10 @@ export function updatePost(post) {
 
 export function setLikes(counts) {
   state.likes = new Map(counts.map((count) => [count.post_id, count]));
+}
+
+export function isBookmarked(postId) {
+  return state.bookmarks.includes(postId);
 }
 
 export function likesOf(postId) {

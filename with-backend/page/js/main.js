@@ -11,9 +11,11 @@ import { exploreLink, postLink, profileLink, readAddress } from "./format.js";
 import { fillIcons } from "./icons.js";
 import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
-import { exploreScreen, homeScreen, postScreen, profileHandlers, profileScreen, sidebar } from "./screens.js";
 import {
-  addPosts, changed, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
+  bookmarksScreen, exploreScreen, homeScreen, postScreen, profileHandlers, profileScreen, sidebar,
+} from "./screens.js";
+import {
+  addPosts, changed, isBookmarked, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
 } from "./state.js";
 
 const NOBODY = { name: null, following: [] };
@@ -38,7 +40,9 @@ function updateComposeCount() {
 const sidebarHolder = document.getElementById("sidebar");
 const joinBar = document.getElementById("join-bar");
 
-const SCREENS = { home: homeScreen, post: postScreen, profile: profileScreen, explore: exploreScreen };
+const SCREENS = {
+  home: homeScreen, post: postScreen, profile: profileScreen, explore: exploreScreen, bookmarks: bookmarksScreen,
+};
 const searchForm = document.getElementById("search-form");
 const searchBox = document.getElementById("search-box");
 
@@ -97,6 +101,9 @@ function drawMenu(address) {
     }
   }
   const loggedIn = state.me !== null;
+  for (const item of document.querySelectorAll("[data-needs-login]")) {
+    item.hidden = !loggedIn;
+  }
   document.getElementById("nav-profile").hidden = !loggedIn;
   document.getElementById("nav-post").hidden = !loggedIn;
   document.getElementById("nav-me").hidden = !loggedIn;
@@ -127,6 +134,10 @@ async function checkPosts() {
 
 async function checkLikes() {
   setLikes(await get("/likes"));
+}
+
+async function checkBookmarks() {
+  state.bookmarks = state.me === null ? [] : (await get("/bookmarks")).post_ids;
 }
 
 async function checkChanges() {
@@ -183,6 +194,7 @@ async function catchUp() {
       await checkPeople();
       await checkPosts();
       await checkLikes();
+      await checkBookmarks();
       await checkChanges();
       await checkProfile();
       await checkSearch();
@@ -236,6 +248,22 @@ handlers.like = async (postId) => {
   }
   setLikes(answer);
   changed();
+};
+
+handlers.bookmark = async (postId) => {
+  if (state.me === null) {
+    openLogin("login");
+    return;
+  }
+  const saved = isBookmarked(postId);
+  const { answer, error } = await send(saved ? "DELETE" : "POST", "/bookmarks", { post_id: postId });
+  if (error) {
+    showStatus(error);
+    return;
+  }
+  state.bookmarks = answer.post_ids;
+  changed();
+  toast(saved ? "Removed from your Bookmarks" : "Added to your Bookmarks");
 };
 
 handlers.remove = async (postId) => {
@@ -310,6 +338,7 @@ document.getElementById("nav-post").addEventListener("click", () => openWrite("p
 document.getElementById("log-out").addEventListener("click", async () => {
   await send("POST", "/logout");
   setMe(NOBODY);
+  state.bookmarks = [];
   await checkLikes().catch(() => {});
   changed();
   toast("You are logged out");
