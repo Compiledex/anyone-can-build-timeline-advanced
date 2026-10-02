@@ -29,13 +29,17 @@
   --gold: #f8d491;
   --header-glass: rgba(255, 255, 255, 0.86);
   --shadow: 0 4px 18px rgba(15, 38, 70, 0.18);
+  --logo-edge: none;
+  color-scheme: light;
   --serif: "EB Garamond", "Noto Serif JP", "Hiragino Mincho ProN", Georgia, serif;
   --sans: "Roboto", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
 }
 
-/* A computer set to dark mode gets the navy and gold of the site's dark section. */
+/* Dark: the navy and gold of the site's dark section. It is used when the computer is set to dark
+   (unless you chose Light), or when you chose Dark with the switch at the top of the page.
+   The switch puts data-theme="light" or "dark" on the page; System takes it away. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0f2646;
     --surface: #0f2646;
     --hover: #15315a;
@@ -54,7 +58,32 @@
     --warning: #ff8a7a;
     --header-glass: rgba(15, 38, 70, 0.86);
     --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+    --logo-edge: inset 0 0 0 1px var(--gold);   /* the page is navy too, so the logo gets a gold edge */
+    color-scheme: dark;                          /* the browser's own parts (scrollbars, boxes) dark too */
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #0f2646;
+  --surface: #0f2646;
+  --hover: #15315a;
+  --pale-box: #15315a;
+  --text: #f4f1e8;
+  --quiet: #a9b4c4;
+  --brand: #f8d491;
+  --number: #f8d491;
+  --link: #fbe3b4;
+  --border: #2c4a75;
+  --button: #f8d491;
+  --button-text: #0f2646;
+  --like: #ff7a8a;
+  --like-pale: rgba(255, 122, 138, 0.14);
+  --brand-pale: rgba(248, 212, 145, 0.14);
+  --warning: #ff8a7a;
+  --header-glass: rgba(15, 38, 70, 0.86);
+  --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  --logo-edge: inset 0 0 0 1px var(--gold);   /* the page is navy too, so the logo gets a gold edge */
+  color-scheme: dark;                          /* the browser's own parts (scrollbars, boxes) dark too */
 }
 
 * {
@@ -158,11 +187,8 @@ a:hover {
   font-size: 34px;
 }
 
-/* In dark mode the page is navy too, so the logo gets a thin gold edge. */
-@media (prefers-color-scheme: dark) {
-  .logo-mark {
-    box-shadow: inset 0 0 0 1px var(--gold);
-  }
+.logo-mark {
+  box-shadow: var(--logo-edge);
 }
 
 .logo-word {
@@ -302,6 +328,37 @@ a:hover {
 
 .mobile-logo {
   display: none;
+}
+
+/* The switches at the top right of every screen: colours, and (later) language. */
+.header-tools {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.header-tools .icon-button {
+  width: auto;
+  min-width: 38px;
+  padding: 0 10px;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--quiet);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.header-tools .icon-button:hover {
+  color: var(--brand);
+}
+
+.header-tools .icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .center-heading {

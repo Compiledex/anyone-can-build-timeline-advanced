@@ -10,6 +10,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400..700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500&family=Roboto:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Before anything is drawn: the colours you chose last time (System, Light or Dark),
+    // so the page never flashes the wrong ones. settings.js does the rest.
+    try {
+      const theme = localStorage.getItem("timeline-theme");
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.dataset.theme = theme;
+      }
+    } catch (error) {
+      // The browser keeps no settings (a private window, for example): use the computer's.
+    }
+  </script>
   <!-- The page's JavaScript, as modules: main.js starts everything and imports the rest. -->
   <script type="module" src="js/main.js"></script>
 </head>
@@ -56,6 +68,9 @@
           <input id="search-box" type="search" placeholder="Search posts, people and #tags" maxlength="100" autocomplete="off">
         </form>
         <nav class="tabs" id="tabs" aria-label="Timelines" hidden></nav>
+        <div class="header-tools">
+          <button type="button" class="icon-button" id="theme-button"></button>
+        </div>
       </header>
 
       <p id="status" class="status" role="status" hidden></p>

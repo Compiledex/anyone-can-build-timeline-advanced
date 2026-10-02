@@ -8,8 +8,9 @@
 import { CANNOT_REACH, get, onLoggedOut, send, showStatus, toast } from "./api.js";
 import { onProfileSaved, onSent, openEditProfile, openLogin, openWrite, updateCount } from "./dialogs.js";
 import { exploreLink, postLink, profileLink, readAddress } from "./format.js";
-import { fillIcons } from "./icons.js";
+import { fillIcons, icon } from "./icons.js";
 import { picturePicker } from "./pictures.js";
+import { currentTheme, nextTheme, setTheme } from "./settings.js";
 import { avatar, element, handlers, link } from "./render.js";
 import {
   bookmarksScreen, exploreScreen, homeScreen, messagesScreen, notificationsScreen, postScreen, profileHandlers,
@@ -507,10 +508,27 @@ async function addressChanged() {
 
 window.addEventListener("hashchange", addressChanged);
 
+// The colours switch at the top: System → Light → Dark. It shows the one in use now.
+const themeButton = document.getElementById("theme-button");
+const THEME_LOOK = { system: ["system", "System"], light: ["sun", "Light"], dark: ["moon", "Dark"] };
+
+function drawThemeButton() {
+  const [iconName, words] = THEME_LOOK[currentTheme()];
+  themeButton.replaceChildren(icon(iconName), document.createTextNode(words));
+  themeButton.setAttribute("aria-label", "Colours: " + words + ". Press to change.");
+  themeButton.title = "Colours: " + words;
+}
+
+themeButton.addEventListener("click", () => {
+  setTheme(nextTheme());
+  drawThemeButton();
+});
+
 // Times like "5m" grow older: draw again every minute.
 setInterval(changed, 60 * 1000);
 
 fillIcons();
+drawThemeButton();
 updateComposeCount();
 addressChanged();
 listen();
