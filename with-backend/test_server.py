@@ -353,6 +353,60 @@ class ModelTests(unittest.TestCase):
             with self.assertRaises(server.NotFound):
                 server.profile(self.db_path, wrong)
 
+    # ---- Follows ----
+
+    def test_follow_someone(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        self.user("Chen")
+        server.follow(self.db_path, aiko, "chen")
+        server.follow(self.db_path, aiko, "Ben")
+        self.assertEqual([row["name"] for row in server.followed_by(self.db_path, aiko)],
+                         ["Ben", "Chen"])
+        self.assertEqual(server.followed_by(self.db_path, ben), [])   # following is one way
+
+    def test_you_cannot_follow_yourself(self):
+        aiko = self.user("Aiko")
+        with self.assertRaises(server.RuleBroken):
+            server.follow(self.db_path, aiko, "Aiko")
+
+    def test_the_database_itself_refuses_following_yourself(self):
+        self.user("Aiko")
+        connection = server.connect(self.db_path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("INSERT INTO follows (follower_id, followed_id) VALUES (1, 1)")
+        connection.close()
+
+    def test_you_cannot_follow_someone_twice(self):
+        aiko = self.user("Aiko")
+        self.user("Ben")
+        server.follow(self.db_path, aiko, "Ben")
+        with self.assertRaises(server.RuleBroken):
+            server.follow(self.db_path, aiko, "BEN")
+
+    def test_unfollow(self):
+        aiko = self.user("Aiko")
+        self.user("Ben")
+        server.follow(self.db_path, aiko, "Ben")
+        server.unfollow(self.db_path, aiko, "Ben")
+        self.assertEqual(server.followed_by(self.db_path, aiko), [])
+        with self.assertRaises(server.RuleBroken):
+            server.unfollow(self.db_path, aiko, "Ben")   # not following any more
+
+    def test_following_nobody_is_not_found(self):
+        aiko = self.user("Aiko")
+        with self.assertRaises(server.NotFound):
+            server.follow(self.db_path, aiko, "Nobody")
+
+    def test_a_profile_counts_followers_and_following(self):
+        aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
+        server.follow(self.db_path, aiko, "Ben")
+        server.follow(self.db_path, chen, "Ben")
+        server.follow(self.db_path, ben, "Aiko")
+        row = server.profile_to_json(server.profile(self.db_path, "Ben", aiko))
+        self.assertEqual((row["followers"], row["following"], row["you_follow"]), (2, 1, True))
+        row = server.profile_to_json(server.profile(self.db_path, "Ben", None))
+        self.assertFalse(row["you_follow"])
+
 class RealServerTest(unittest.TestCase):
 
     def setUp(self):
@@ -397,7 +451,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_sign_up_post_then_get(self):
         aiko = self.signed_up("Aiko")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko"}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "following": []}))
         status, post = self.send(aiko, "POST", "/posts", {"text": "hello"})
         self.assertEqual((status, post["author"]), (201, "Aiko"))
         status, posts = self.send(self.browser(), "GET", "/posts?after=0")  # anyone can read
@@ -414,7 +468,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_without_logging_in_you_can_read_but_not_write(self):
         stranger = self.browser()
-        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None}))
+        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "following": []}))
         for method, path, data in [("POST", "/posts", {"text": "hello"}),
                                    ("POST", "/likes", {"post_id": 1}),
                                    ("PUT", "/posts", {"post_id": 1, "text": "hi"}),
@@ -426,12 +480,12 @@ class RealServerTest(unittest.TestCase):
     def test_log_out_then_log_in(self):
         aiko = self.signed_up("Aiko")
         self.send(aiko, "POST", "/logout")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "following": []}))
         self.assertEqual(self.send(aiko, "POST", "/posts", {"text": "hello"})[0], 401)
         status, _ = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": "wrong one"})
         self.assertEqual(status, 400)
         status, me = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": PASSWORD})
-        self.assertEqual((status, me), (200, {"name": "Aiko"}))
+        self.assertEqual((status, me), (200, {"name": "Aiko", "following": []}))
 
     def test_like_unlike_and_who_liked(self):
         aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
@@ -475,6 +529,18 @@ class RealServerTest(unittest.TestCase):
         status, answer = self.send(self.browser(), "GET", "/users?name=aiko")
         self.assertEqual((status, answer["name"], answer["posts"]), (200, "Aiko", 1))
         self.assertEqual(self.send(aiko, "GET", "/users?name=Nobody")[0], 404)
+
+
+    def test_follow_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.signed_up("Ben")
+        self.assertEqual(self.send(self.browser(), "POST", "/follows", {"name": "Ben"})[0], 401)
+        self.assertEqual(self.send(aiko, "POST", "/follows", {"name": "ben"}),
+                         (201, {"name": "Aiko", "following": ["Ben"]}))
+        self.assertTrue(self.send(aiko, "GET", "/users?name=Ben")[1]["you_follow"])
+        self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
+        self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
+                         (200, {"name": "Aiko", "following": []}))
 
 
 if __name__ == "__main__":

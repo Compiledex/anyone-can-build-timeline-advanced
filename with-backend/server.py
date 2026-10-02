@@ -2,7 +2,7 @@
 
 This file has three parts:
   CONTROLLER  reads each request and decides what to do
-  MODEL       the rules, and the database (tables: users, sessions, posts and likes)
+  MODEL       the rules, and the database (tables: users, sessions, posts, likes, follows)
   VIEW        turns database rows into the JSON answer
 It uses only the Python standard library, so there is nothing to install.
 """
@@ -79,25 +79,38 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def post_signup(self, query):
         data = self.read_json()
         token = sign_up(self.db, data.get("name"), data.get("password"))
-        self.send_json(201, me_to_json(current_user(self.db, token)), cookie=token)
+        self.send_me(201, current_user(self.db, token), cookie=token)
 
     def post_login(self, query):
         data = self.read_json()
         token = log_in(self.db, data.get("name"), data.get("password"))
-        self.send_json(200, me_to_json(current_user(self.db, token)), cookie=token)
+        self.send_me(200, current_user(self.db, token), cookie=token)
 
     def post_logout(self, query):
         log_out(self.db, self.session_token())
-        self.send_json(200, me_to_json(None), cookie="")
+        self.send_me(200, None, cookie="")
 
     def get_me(self, query):
-        self.send_json(200, me_to_json(current_user(self.db, self.session_token())))
+        self.send_me(200, current_user(self.db, self.session_token()))
 
     # ---- People ----
 
     def get_users(self, query):
         name = query.get("name", [""])[0]
-        self.send_json(200, profile_to_json(profile(self.db, name)))
+        viewer = current_user(self.db, self.session_token())
+        self.send_json(200, profile_to_json(profile(self.db, name, viewer["id"] if viewer else None)))
+
+    def post_follows(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        follow(self.db, user["id"], data.get("name"))
+        self.send_me(201, user)
+
+    def delete_follows(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        unfollow(self.db, user["id"], data.get("name"))
+        self.send_me(200, user)
 
     # ---- Posts ----
 
@@ -186,6 +199,11 @@ class TimelineHandler(BaseHTTPRequestHandler):
         except OSError:
             self.send_json(404, {"error": "The file " + file_name + " is missing."})
 
+    def send_me(self, status, user, cookie=None):
+        """Send who is logged in (or nobody), and the names they follow."""
+        following = followed_by(self.db, user["id"]) if user else []
+        self.send_json(status, me_to_json(user, following), cookie=cookie)
+
     def send_json(self, status, data, cookie=None):
         """Send data as JSON. With a cookie, also set the session cookie: a token logs the
         browser in, and "" logs it out."""
@@ -223,6 +241,8 @@ ROUTES = {
     ("POST", "/logout"): TimelineHandler.post_logout,
     ("GET", "/me"): TimelineHandler.get_me,
     ("GET", "/users"): TimelineHandler.get_users,
+    ("POST", "/follows"): TimelineHandler.post_follows,
+    ("DELETE", "/follows"): TimelineHandler.delete_follows,
     ("GET", "/posts"): TimelineHandler.get_posts,
     ("POST", "/posts"): TimelineHandler.post_posts,
     ("PUT", "/posts"): TimelineHandler.put_posts,
@@ -242,6 +262,7 @@ ROUTES = {
 #    posts     each post points at its author by id; a reply also points at the post
 #              it answers; a deleted post keeps its row, with its text erased
 #    likes     one row for each post and user who liked it
+#    follows   one row for each person and someone they follow
 #  A new rule goes here, never in the controller or the view.
 # ============================================================================
 
@@ -312,6 +333,14 @@ def create_tables(db_path):
             post_id INTEGER NOT NULL REFERENCES posts(id),
             user_id INTEGER NOT NULL REFERENCES users(id),
             PRIMARY KEY (post_id, user_id));
+
+        -- Who follows whom. The pair is the primary key, so you can follow someone only
+        -- once, and the CHECK stops anyone from following themselves.
+        CREATE TABLE IF NOT EXISTS follows (
+            follower_id INTEGER NOT NULL REFERENCES users(id),
+            followed_id INTEGER NOT NULL REFERENCES users(id),
+            PRIMARY KEY (follower_id, followed_id),
+            CHECK (follower_id != followed_id));
     """)
     connection.close()
 
@@ -464,17 +493,64 @@ def find_user(connection, name):
     return row
 
 
-def profile(db_path, name):
-    """Return a person's name, when they joined, and how many posts they have (not deleted ones)."""
+def profile(db_path, name, viewer_id=None):
+    """Return a person's name, when they joined, how many posts they have (not deleted ones),
+    how many followers and followed people they have, and whether the viewer follows them."""
     connection = connect(db_path)
     try:
         user = find_user(connection, name)
         return connection.execute(
             "SELECT name, joined_at, "
-            "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts "
-            "FROM users WHERE id = ?", (user["id"],)).fetchone()
+            "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts, "
+            "(SELECT COUNT(*) FROM follows WHERE followed_id = users.id) AS followers, "
+            "(SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following, "
+            "EXISTS (SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = users.id) "
+            "AS you_follow "
+            "FROM users WHERE id = ?", (viewer_id, user["id"])).fetchone()
     finally:
         connection.close()
+
+
+def follow(db_path, user_id, name):
+    """Check the rules, and make this user follow the person with this name."""
+    connection = connect(db_path)
+    try:
+        person = find_user(connection, name)
+        if person["id"] == user_id:
+            raise RuleBroken("You cannot follow yourself.")
+        try:
+            connection.execute("INSERT INTO follows (follower_id, followed_id) VALUES (?, ?)",
+                               (user_id, person["id"]))
+        except sqlite3.IntegrityError:
+            # The primary key refused a second row for the same pair.
+            raise RuleBroken(f"You already follow {person['name']}.")
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def unfollow(db_path, user_id, name):
+    """Check the rules, and stop this user from following the person with this name."""
+    connection = connect(db_path)
+    try:
+        person = find_user(connection, name)
+        cursor = connection.execute("DELETE FROM follows WHERE follower_id = ? AND followed_id = ?",
+                                    (user_id, person["id"]))
+        if cursor.rowcount == 0:
+            raise RuleBroken(f"You do not follow {person['name']}.")
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def followed_by(db_path, user_id):
+    """Return everyone this user follows, A to Z."""
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT users.name FROM follows JOIN users ON users.id = follows.followed_id "
+        "WHERE follows.follower_id = ? ORDER BY users.name COLLATE NOCASE", (user_id,)).fetchall()
+    connection.close()
+    return rows
 
 
 # ---- Posts ----
@@ -625,12 +701,15 @@ def like_counts(db_path, viewer_id=None):
 #  Turns database rows into the JSON the page reads.
 # ============================================================================
 
-def me_to_json(user):
-    return {"name": user["name"] if user else None}
+def me_to_json(user, following=()):
+    return {"name": user["name"] if user else None,
+            "following": [row["name"] for row in following]}
 
 
 def profile_to_json(row):
-    return {"name": row["name"], "joined_at": row["joined_at"], "posts": row["posts"]}
+    return {"name": row["name"], "joined_at": row["joined_at"], "posts": row["posts"],
+            "followers": row["followers"], "following": row["following"],
+            "you_follow": row["you_follow"] == 1}
 
 
 def post_to_json(row):

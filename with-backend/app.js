@@ -30,9 +30,19 @@ const profileSection = document.getElementById("profile");
 const profileName = document.getElementById("profile-name");
 const profileFacts = document.getElementById("profile-facts");
 const emptyLine = document.getElementById("empty");
+const followButton = document.getElementById("follow-button");
+const tabs = document.getElementById("tabs");
+const tabEveryone = document.getElementById("tab-everyone");
+const tabFollowing = document.getElementById("tab-following");
 
 // The logged-in person's name, or null when nobody is logged in.
 let me = null;
+
+// The names the logged-in person follows, in small letters: names are the same whatever their capitals.
+let following = new Set();
+
+// What the server says when nobody is logged in.
+const NOBODY = { name: null, following: [] };
 
 // The id of the newest post this window has shown. 0 means "none yet".
 let lastId = 0;
@@ -76,7 +86,8 @@ function plural(count, word) {
 }
 
 // ---- Screens: the timeline, or one person's profile ----
-// The address says which: "#/" is the timeline, "#/@Ben" is Ben's profile.
+// The address says which: "#/" is everyone's timeline, "#/following" is only the people
+// you follow, and "#/@Ben" is Ben's profile.
 // Because the screen is in the address, the browser's Back button works.
 
 function profileInAddress() {
@@ -87,6 +98,10 @@ function profileInAddress() {
     // A broken address, like "#/@%": use it as it is.
   }
   return address.startsWith("#/@") ? address.slice(3) : null;
+}
+
+function followingInAddress() {
+  return location.hash === "#/following";
 }
 
 function profileLink(name) {
@@ -101,22 +116,51 @@ function showScreen() {
   if (name !== null) {
     profileName.textContent = name;
     profileFacts.textContent = "";
+    followButton.hidden = true;
     checkProfile();
   }
+  showTabs();
   filterPosts();
+}
+
+// The Everyone and Following tabs: on the timeline, for someone who is logged in.
+function showTabs() {
+  tabs.hidden = profileInAddress() !== null || me === null;
+  if (followingInAddress()) {
+    tabFollowing.setAttribute("aria-current", "page");
+    tabEveryone.removeAttribute("aria-current");
+  } else {
+    tabEveryone.setAttribute("aria-current", "page");
+    tabFollowing.removeAttribute("aria-current");
+  }
 }
 
 // Show only the threads that belong on this screen. A thread is a post with all its replies.
 // On a profile, a thread belongs if the person wrote the post or any reply in it.
+// On Following, it belongs if you or someone you follow wrote the post.
 function filterPosts() {
   const name = profileInAddress();
+  const onlyFollowing = name === null && followingInAddress() && me !== null;
   let shownAny = false;
   for (const item of timeline.children) {
-    const belongs = name === null || threadHasAuthor(item, name);
+    let belongs = true;
+    if (name !== null) {
+      belongs = threadHasAuthor(item, name);
+    } else if (onlyFollowing) {
+      belongs = isMeOrFollowed(item.dataset.author);
+    }
     item.hidden = !belongs;
     shownAny = shownAny || belongs;
   }
   emptyLine.hidden = shownAny;
+  emptyLine.textContent = onlyFollowing
+    ? "Nobody you follow has posted yet. Open someone's profile and press Follow."
+    : "Nothing here yet.";
+}
+
+function isMeOrFollowed(author) {
+  const name = author.toLowerCase();
+  return name === me.toLowerCase() || following.has(name);
 }
 
 function threadHasAuthor(item, name) {
@@ -244,8 +288,10 @@ function showLikes(counts) {
 }
 
 // Show who is logged in: the bar at the top and the post box, or the log-in box.
-function showMe(name) {
-  me = name;
+// person is the server's answer to /me: their name (or null) and the names they follow.
+function showMe(person) {
+  me = person.name;
+  following = new Set(person.following.map((name) => name.toLowerCase()));
   accountBar.hidden = me === null;
   meName.textContent = me || "";
   meName.href = me ? profileLink(me) : "#/";
@@ -257,6 +303,9 @@ function showMe(name) {
   if (me === null && mode.kind !== "post") {
     cancelMode();
   }
+  showTabs();
+  filterPosts();
+  checkProfile();   // the Follow button depends on who is looking
 }
 
 function showStatus(words) {
@@ -323,7 +372,7 @@ async function send(method, path, data) {
     });
     const answer = await response.json();
     if (response.status === 401) {
-      showMe(null);   // the login ended, for example after 30 days
+      showMe(NOBODY);   // the login ended, for example after 30 days
     }
     if (!response.ok) {
       // The server refused. It says which rule was broken.
@@ -342,7 +391,7 @@ async function send(method, path, data) {
 async function checkMe() {
   try {
     const response = await fetch("/me");
-    showMe((await response.json()).name);
+    showMe(await response.json());
   } catch (error) {
     showStatus(CANNOT_REACH);
   }
@@ -407,7 +456,14 @@ async function checkProfile() {
       return;
     }
     profileName.textContent = person.name;
-    profileFacts.textContent = "Joined " + longDate(person.joined_at) + " · " + plural(person.posts, "post");
+    profileFacts.textContent = "Joined " + longDate(person.joined_at) + " · " +
+      plural(person.posts, "post") + " · " + plural(person.followers, "follower") + " · " +
+      person.following + " following";
+    // A Follow button for someone who is logged in, on anyone's profile but their own.
+    const yours = me !== null && person.name.toLowerCase() === me.toLowerCase();
+    followButton.hidden = me === null || yours;
+    followButton.textContent = person.you_follow ? "Unfollow" : "Follow";
+    followButton.dataset.follows = person.you_follow ? "yes" : "no";
   } catch (error) {
     showStatus(CANNOT_REACH);
   }
@@ -445,13 +501,13 @@ async function logInOrSignUp(path) {
     return;
   }
   loginPassword.value = "";
-  showMe(answer.name);
+  showMe(answer);
   await checkLikes();
 }
 
 async function logOut() {
   await send("POST", "/logout");
-  showMe(null);
+  showMe(NOBODY);
   await checkLikes();
 }
 
@@ -512,6 +568,18 @@ async function deletePost(postId) {
   }
 }
 
+// The Follow button on a profile: follow this person, or stop following them.
+async function toggleFollow() {
+  const method = followButton.dataset.follows === "yes" ? "DELETE" : "POST";
+  followButton.disabled = true;
+  const answer = await send(method, "/follows", { name: profileName.textContent });
+  followButton.disabled = false;
+  if (answer) {
+    showMe(answer);   // the answer lists everyone you follow now
+  }
+}
+
+followButton.addEventListener("click", toggleFollow);
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   logInOrSignUp("/login");

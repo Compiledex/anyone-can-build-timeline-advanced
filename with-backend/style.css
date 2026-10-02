@@ -424,3 +424,42 @@ button:hover {
   color: var(--quiet);
   font-style: italic;
 }
+
+/* ---- Follows ---- */
+
+/* The gold pill on a profile, like the button on the site's navy section. */
+.gold-button {
+  margin-top: 16px;
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--navy);
+  font-weight: 700;
+}
+
+/* Everyone | Following: small capitals with a blue line under the open tab, like the site's menu. */
+.tabs {
+  display: flex;
+  gap: 28px;
+  margin: 8px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs a {
+  padding: 8px 2px;
+  border-bottom: 3px solid transparent;
+  color: var(--quiet);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.tabs a:hover {
+  color: var(--brand);
+}
+
+.tabs a[aria-current="page"] {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+}

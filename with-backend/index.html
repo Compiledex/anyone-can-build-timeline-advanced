@@ -27,6 +27,7 @@
       <a class="profile-back" href="#/">← The whole timeline</a>
       <h1 id="profile-name" class="profile-name"></h1>
       <p id="profile-facts" class="profile-facts"></p>
+      <button type="button" id="follow-button" class="gold-button" hidden>Follow</button>
     </section>
 
     <form id="login-form" class="card" hidden>
@@ -54,6 +55,11 @@
         <button type="submit" id="submit-button">Post</button>
       </div>
     </form>
+
+    <nav id="tabs" class="tabs" aria-label="Timelines" hidden>
+      <a href="#/" id="tab-everyone">Everyone</a>
+      <a href="#/following" id="tab-following">Following</a>
+    </nav>
 
     <p id="status" class="status" role="status"></p>
 
