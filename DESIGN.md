@@ -2,7 +2,7 @@
 
 *Every name and example row here is made up.*
 
-This is the advanced copy of Timeline. The simple version, in its own folder, has one screen and no
+This is the advanced copy of Timeline. The simple version, [anyone-can-build-timeline](https://github.com/Compiledex/anyone-can-build-timeline), has one screen and no
 accounts. This version is a small social app in the familiar three-column layout, with accounts,
 pictures, replies, reposts and quotes, likes and bookmarks, #tags, @mentions and search, follows,
 notifications, private messages and live updates, in a look based on the Kansai Gaidai Asian Studies

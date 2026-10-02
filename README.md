@@ -11,10 +11,23 @@ titles and names, pale blue-grey boxes, and navy with gold. The logo, 結 ("to t
 own; the university's logo is not used.
 
 This is the advanced copy of Timeline. The simple version (no accounts, a page-only version, a check
-for news every second) lives in its own folder, kept as it was, so you can compare the two.
+for news every second) is [anyone-can-build-timeline](https://github.com/Compiledex/anyone-can-build-timeline), kept as it was, so you can compare the two. Both
+grew from [anyone-can-build-timeline](https://github.com/kreativitea/anyone-can-build-timeline) by
+Michael Omoto.
 
 You need a web browser and `python3`, version 3.9 or newer. A Mac already has it. There is nothing
 to install.
+
+## Get it
+
+```
+git clone https://github.com/Compiledex/anyone-can-build-timeline-advanced.git
+cd anyone-can-build-timeline-advanced
+make test
+```
+
+Every check should pass. The database and the uploaded pictures are not in git: the server makes
+them when it starts.
 
 ## Run it
 

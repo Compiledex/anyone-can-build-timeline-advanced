@@ -11,7 +11,8 @@ edit and delete their own posts, use #tags and @mentions, search, follow each ot
 notifications, and send private messages. Every open window sees every change at once. The look
 follows the Kansai Gaidai Asian Studies Program site; the logo (結) is our own, not the university's.
 
-This folder is a copy of the simple Timeline, which lives in its own folder and is kept as it was.
+This is a copy of the simple Timeline, which is kept as it was in its own repository,
+[anyone-can-build-timeline](https://github.com/Compiledex/anyone-can-build-timeline).
 
 ## What each file does
 
