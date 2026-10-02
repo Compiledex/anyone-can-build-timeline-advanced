@@ -16,9 +16,10 @@ def people_to_json(rows):
     return [{"name": row["name"], "avatar": upload_url(row["avatar_file"])} for row in rows]
 
 
-def me_to_json(user, following=(), unread_notifications=0):
+def me_to_json(user, following=(), unread_notifications=0, unread_messages=0):
     return {"name": user["name"] if user else None,
             "unread_notifications": unread_notifications,
+            "unread_messages": unread_messages,
             "bio": user["bio"] if user else "",
             "avatar": upload_url(user["avatar_file"]) if user else None,
             "following": [row["name"] for row in following]}
@@ -76,3 +77,18 @@ def sidebar_to_json(trends, suggestions):
     return {"trends": [{"tag": row["tag"], "posts": row["posts"]} for row in trends],
             "suggestions": [{"name": row["name"], "bio": row["bio"], "avatar": upload_url(row["avatar_file"]),
                              "followers": row["followers"]} for row in suggestions]}
+
+
+def message_to_json(row):
+    return {"id": row["id"], "from_me": row["from_me"] == 1, "text": row["text"],
+            "sent_at": row["sent_at"], "read": row["read_at"] is not None}
+
+
+def conversations_to_json(rows):
+    return [{"name": row["name"], "avatar": upload_url(row["avatar_file"]), "text": row["text"],
+             "sent_at": row["sent_at"], "from_me": row["from_me"] == 1, "unread": row["unread"]}
+            for row in rows]
+
+
+def conversation_to_json(person, rows):
+    return {"with": person["name"], "messages": [message_to_json(row) for row in rows]}

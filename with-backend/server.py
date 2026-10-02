@@ -239,6 +239,28 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def get_changes(self, query):
         self.send_json(200, view.posts_to_json(model.changed_posts(self.db)))
 
+    # ---- Direct messages: always the logged-in person's own conversations ----
+
+    def get_messages(self, query):
+        user = self.logged_in_user()
+        if "with" in query:
+            person, rows = model.conversation(self.db, user["id"], query["with"][0])
+            self.send_json(200, view.conversation_to_json(person, rows))
+        else:
+            self.send_json(200, view.conversations_to_json(model.conversations(self.db, user["id"])))
+
+    def post_messages(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        row = model.send_message(self.db, user["id"], data.get("to"), data.get("text"))
+        self.send_json(201, view.message_to_json(row))
+
+    def post_messages_read(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        model.read_conversation(self.db, user["id"], data.get("with"))
+        self.send_me(200, user)
+
     # ---- Notifications: always the logged-in person's own ----
 
     def get_notifications(self, query):
@@ -326,7 +348,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
         """Send who is logged in (or nobody), and the names they follow."""
         following = model.followed_by(self.db, user["id"]) if user else []
         unread = model.unread_notifications(self.db, user["id"]) if user else 0
-        self.send_json(status, view.me_to_json(user, following, unread), cookie=cookie)
+        messages = model.unread_messages(self.db, user["id"]) if user else 0
+        self.send_json(status, view.me_to_json(user, following, unread, messages), cookie=cookie)
 
     def send_json(self, status, data, cookie=None):
         """Send data as JSON. With a cookie, also set the session cookie: a token logs the
@@ -356,7 +379,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
         if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
                                                            "/users", "/events", "/people",
                                                            "/uploads", "/search", "/bookmarks",
-                                                           "/notifications", "/sidebar")):
+                                                           "/notifications", "/sidebar",
+                                                           "/messages")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
@@ -398,6 +422,9 @@ ROUTES = {
     ("POST", "/reposts"): TimelineHandler.post_reposts,
     ("DELETE", "/reposts"): TimelineHandler.delete_reposts,
     ("GET", "/changes"): TimelineHandler.get_changes,
+    ("GET", "/messages"): TimelineHandler.get_messages,
+    ("POST", "/messages"): TimelineHandler.post_messages,
+    ("POST", "/messages/read"): TimelineHandler.post_messages_read,
     ("GET", "/notifications"): TimelineHandler.get_notifications,
     ("POST", "/notifications/read"): TimelineHandler.post_notifications_read,
     ("GET", "/bookmarks"): TimelineHandler.get_bookmarks,

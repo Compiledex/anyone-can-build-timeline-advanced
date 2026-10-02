@@ -65,6 +65,7 @@ export function avatarColour(name) {
 //   #/post/12       post 12, with its replies
 //   #/explore       the search page        #/explore/%23kyoto  what a search for #kyoto found
 //   #/bookmarks     your saved posts       #/notifications  what happened to you
+//   #/messages      your conversations     #/messages/@Ben  your conversation with Ben
 
 export function profileLink(name, tab = "") {
   return "#/@" + encodeURIComponent(name) + (tab ? "/" + tab : "");
@@ -72,6 +73,10 @@ export function profileLink(name, tab = "") {
 
 export function postLink(id) {
   return "#/post/" + id;
+}
+
+export function messagesLink(name = "") {
+  return "#/messages" + (name ? "/@" + encodeURIComponent(name) : "");
 }
 
 export function exploreLink(query = "") {
@@ -95,6 +100,10 @@ export function readAddress() {
   const parts = raw.split("/").map(decode);
   if (parts[0].startsWith("@") && parts[0].length > 1) {
     return { screen: "profile", name: parts[0].slice(1), tab: parts[1] === "replies" ? "replies" : "posts" };
+  }
+  if (parts[0] === "messages") {
+    const name = (parts[1] || "").startsWith("@") ? parts[1].slice(1) : "";
+    return { screen: "messages", with: name || null };
   }
   if (parts[0] === "bookmarks" || parts[0] === "notifications") {
     return { screen: parts[0] };

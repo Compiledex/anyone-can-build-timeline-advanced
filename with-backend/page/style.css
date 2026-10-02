@@ -462,6 +462,191 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
+/* ---- Messages ---- */
+
+/* A conversation in the list. Unread ones sit on the site's pale blue-grey, with a red number. */
+.conversation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.conversation:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.conversation.unread {
+  background: var(--pale-box);
+}
+
+.conversation-words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.conversation-name {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.conversation-time {
+  color: var(--quiet);
+}
+
+.conversation-last {
+  overflow: hidden;
+  color: var(--quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation.unread .conversation-last {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.conversation-dot {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: var(--warning);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+/* The top of a conversation: who it is with. */
+.chat-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.chat-who:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.chat-who .avatar-big {
+  width: 72px;
+  height: 72px;
+  border: 0;
+  font-size: 34px;
+}
+
+.chat-who-name {
+  margin-top: 6px;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.chat-who-handle {
+  color: var(--quiet);
+}
+
+/* The speech bubbles: theirs on the left on the pale box, yours on the right in deep blue. */
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 16px 24px;
+}
+
+.chat-empty {
+  color: var(--quiet);
+  text-align: center;
+}
+
+.message {
+  max-width: 78%;
+}
+
+.message.mine {
+  align-self: flex-end;
+}
+
+.message-text {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 20px 20px 20px 4px;
+  background: var(--pale-box);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message.mine .message-text {
+  border-radius: 20px 20px 4px 20px;
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.message-time {
+  margin: 2px 6px 8px;
+  color: var(--quiet);
+  font-size: 12px;
+}
+
+.message.mine .message-time {
+  text-align: right;
+}
+
+/* The box for a new message, stuck to the bottom of the screen. */
+.message-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--background);
+}
+
+.message-form textarea {
+  flex: 1;
+  min-height: 42px;
+  max-height: 160px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  background: var(--pale-box);
+  color: var(--text);
+  font: inherit;
+  resize: none;
+}
+
+.message-form textarea:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
+.send-button {
+  color: var(--brand);
+}
+
+@media (max-width: 700px) {
+  .message-form {
+    bottom: 56px;   /* above the menu bar */
+  }
+}
+
 /* A notification: an icon in its own colour, then who did it, and the post it is about.
    New ones sit on the site's pale blue-grey. */
 .notification {
@@ -1180,8 +1365,17 @@ a:hover {
 .profile-top {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  gap: 8px;
   margin-top: -64px;
+}
+
+.profile-top > .avatar {
+  margin-right: auto;   /* the avatar on the left, the buttons on the right */
+}
+
+.icon-button-outline {
+  border: 1px solid var(--border);
+  color: var(--text);
 }
 
 .profile-name {

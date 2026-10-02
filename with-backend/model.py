@@ -12,6 +12,7 @@ The tables:
   post_tags each #tag in each post, so that tags can be found fast
   bookmarks each person's saved posts; only they can see them
   notifications  what happened to each person; only they can see theirs
+  messages  private messages between two people; only those two can read them
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -37,6 +38,7 @@ MAX_PASSWORD = 200
 MAX_BIO = 160
 MAX_UPLOAD = 2 * 1024 * 1024   # 2 MB for one picture
 MAX_QUERY = 100
+MAX_MESSAGE = 1000
 
 # A #tag or an @name: letters (of any language), numbers and _. \w means exactly that.
 # (?<!\w): only when no letter comes right before, so "a@b.c" has no @name in it.
@@ -162,6 +164,13 @@ def create_tables(db_path):
     # The same thing is told only once, even if it is done, undone and done again.
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_notification_each ON notifications "
                        "(user_id, actor_id, kind, IFNULL(post_id, 0))")
+    # Private messages between two people. Only those two can read them.
+    connection.execute("CREATE TABLE IF NOT EXISTS messages ("
+                       "id INTEGER PRIMARY KEY, "
+                       "sender_id INTEGER NOT NULL REFERENCES users(id), "
+                       "receiver_id INTEGER NOT NULL REFERENCES users(id), "
+                       "text TEXT NOT NULL, sent_at TEXT NOT NULL, read_at TEXT, "
+                       "CHECK (sender_id != receiver_id))")
     # Each person's saved posts. Only they can see them.
     connection.execute("CREATE TABLE IF NOT EXISTS bookmarks ("
                        "user_id INTEGER NOT NULL REFERENCES users(id), "
@@ -850,6 +859,90 @@ def read_notifications(db_path, user_id):
                        (now(), user_id))
     connection.commit()
     connection.close()
+
+
+# ---- Direct messages: every query is about one person's own conversations ----
+
+def check_message(text):
+    """Return the message without extra spaces, or raise RuleBroken."""
+    text = text.strip() if isinstance(text, str) else ""
+    if text == "":
+        raise RuleBroken("The message must not be empty.")
+    if len(text) > MAX_MESSAGE:
+        raise RuleBroken(f"A message must be {MAX_MESSAGE} characters or fewer.")
+    return text
+
+
+def send_message(db_path, sender_id, to_name, text, sent_at=None):
+    """Check the rules, save the message, and return it."""
+    text = check_message(text)
+    connection = connect(db_path)
+    try:
+        person = find_user(connection, to_name)
+        if person["id"] == sender_id:
+            raise RuleBroken("You cannot send a message to yourself.")
+        cursor = connection.execute(
+            "INSERT INTO messages (sender_id, receiver_id, text, sent_at) VALUES (?, ?, ?, ?)",
+            (sender_id, person["id"], text, sent_at or now()))
+        connection.commit()
+        return connection.execute("SELECT *, 1 AS from_me FROM messages WHERE id = ?",
+                                  (cursor.lastrowid,)).fetchone()
+    finally:
+        connection.close()
+
+
+def conversations(db_path, user_id):
+    """Everyone this user has messages with: the newest message of each conversation, and how
+    many from them are unread. The conversation with the newest message comes first."""
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT other.name, avatars.file_name AS avatar_file, last.text, last.sent_at, "
+        "last.sender_id = ? AS from_me, "
+        "(SELECT COUNT(*) FROM messages WHERE sender_id = other.id AND receiver_id = ? "
+        "AND read_at IS NULL) AS unread "
+        "FROM (SELECT CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS other_id, "
+        "MAX(id) AS last_id FROM messages WHERE sender_id = ? OR receiver_id = ? GROUP BY other_id) AS pairs "
+        "JOIN users AS other ON other.id = pairs.other_id "
+        "JOIN messages AS last ON last.id = pairs.last_id "
+        "LEFT JOIN uploads AS avatars ON avatars.id = other.avatar_id "
+        "ORDER BY last.id DESC", (user_id, user_id, user_id, user_id, user_id)).fetchall()
+    connection.close()
+    return rows
+
+
+def conversation(db_path, user_id, with_name):
+    """The messages between this user and one other person, oldest first (the last 500)."""
+    connection = connect(db_path)
+    try:
+        person = find_user(connection, with_name)
+        rows = connection.execute(
+            "SELECT * FROM (SELECT *, sender_id = ? AS from_me FROM messages "
+            "WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) "
+            "ORDER BY id DESC LIMIT 500) ORDER BY id",
+            (user_id, user_id, person["id"], person["id"], user_id)).fetchall()
+        return person, rows
+    finally:
+        connection.close()
+
+
+def read_conversation(db_path, user_id, with_name):
+    """Mark the messages this user got from the other person as read."""
+    connection = connect(db_path)
+    try:
+        person = find_user(connection, with_name)
+        connection.execute("UPDATE messages SET read_at = ? WHERE sender_id = ? AND receiver_id = ? "
+                           "AND read_at IS NULL", (now(), person["id"], user_id))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def unread_messages(db_path, user_id):
+    connection = connect(db_path)
+    count = connection.execute("SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND read_at IS NULL",
+                               (user_id,)).fetchone()[0]
+    connection.close()
+    return count
 
 
 # ---- Bookmarks ----

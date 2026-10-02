@@ -14,6 +14,9 @@ export const state = {
   bookmarks: [],          // the ids of the posts you saved, the latest first
   unreadNotifications: 0, // how many notifications you have not seen yet
   notifications: [],      // your notifications, newest first, when the Notifications page is open
+  unreadMessages: 0,      // how many messages you have not read yet
+  conversations: [],      // everyone you have messages with, when the Messages page is open
+  chat: null,             // the conversation on screen: { with, messages }
   profile: null,          // the profile on screen, as the server sent it
   search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
   sidebar: { trends: [], suggestions: [] },   // what is trending, and who to follow
@@ -41,6 +44,7 @@ export function setMe(person) {
   state.bio = person.bio || "";
   state.avatar = person.avatar || null;
   state.unreadNotifications = person.unread_notifications || 0;
+  state.unreadMessages = person.unread_messages || 0;
   state.following = new Set(person.following.map((name) => name.toLowerCase()));
 }
 

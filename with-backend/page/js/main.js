@@ -12,8 +12,8 @@ import { fillIcons } from "./icons.js";
 import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
 import {
-  bookmarksScreen, exploreScreen, homeScreen, notificationsScreen, postScreen, profileHandlers, profileScreen,
-  sidebar, sidebarHandlers,
+  bookmarksScreen, exploreScreen, homeScreen, messagesScreen, notificationsScreen, postScreen, profileHandlers,
+  profileScreen, sidebar, sidebarHandlers,
 } from "./screens.js";
 import {
   addPosts, changed, isBookmarked, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
@@ -43,12 +43,15 @@ const joinBar = document.getElementById("join-bar");
 
 const SCREENS = {
   home: homeScreen, post: postScreen, profile: profileScreen, explore: exploreScreen, bookmarks: bookmarksScreen,
-  notifications: notificationsScreen,
+  notifications: notificationsScreen, messages: messagesScreen,
 };
 const searchForm = document.getElementById("search-form");
 const searchBox = document.getElementById("search-box");
 const sideSearch = document.getElementById("side-search");
 const sideSearchBox = document.getElementById("side-search-box");
+const messageForm = document.getElementById("message-form");
+const messageText = document.getElementById("message-text");
+const messageSend = document.getElementById("message-send");
 
 function draw() {
   const address = readAddress();
@@ -81,6 +84,9 @@ function draw() {
   compose.hidden = address.screen !== "home" || state.me === null;
   searchForm.hidden = address.screen !== "explore";
   sideSearch.hidden = address.screen === "explore";   // Explore has its own search box
+  const inChat = address.screen === "messages" && address.with !== null && state.me !== null && Boolean(state.chat);
+  messageForm.hidden = !inChat;
+  const messagesBefore = document.querySelectorAll(".message").length;
   screenHolder.replaceChildren(...shown.nodes);
   sidebarHolder.replaceChildren(...sidebar(openLogin));
   drawMenu(address);
@@ -91,6 +97,10 @@ function draw() {
     if (again) {
       again.focus();
     }
+  }
+  // In a conversation, show the newest message when one arrives, as a chat does.
+  if (inChat && document.querySelectorAll(".message").length > messagesBefore) {
+    window.scrollTo(0, document.body.scrollHeight);
   }
 }
 
@@ -116,6 +126,11 @@ function drawMenu(address) {
   badge.textContent = state.unreadNotifications > 99 ? "99+" : String(state.unreadNotifications);
   badge.parentElement.parentElement.setAttribute("aria-label", state.unreadNotifications > 0
     ? "Notifications, " + state.unreadNotifications + " new" : "Notifications");
+  const messagesBadge = document.getElementById("nav-messages-badge");
+  messagesBadge.hidden = state.unreadMessages === 0;
+  messagesBadge.textContent = state.unreadMessages > 99 ? "99+" : String(state.unreadMessages);
+  messagesBadge.parentElement.parentElement.setAttribute("aria-label", state.unreadMessages > 0
+    ? "Messages, " + state.unreadMessages + " unread" : "Messages");
   document.getElementById("nav-profile").hidden = !loggedIn;
   document.getElementById("nav-post").hidden = !loggedIn;
   document.getElementById("nav-me").hidden = !loggedIn;
@@ -161,6 +176,30 @@ async function checkNotifications() {
   state.notifications = await get("/notifications");
   if (state.notifications.some((told) => !told.read)) {
     const { answer } = await send("POST", "/notifications/read");
+    if (answer) {
+      setMe(answer);
+    }
+  }
+}
+
+// On the Messages page: the list of conversations, or one conversation (marked read once seen).
+async function checkMessages() {
+  const address = readAddress();
+  if (address.screen !== "messages" || state.me === null) {
+    return;
+  }
+  if (address.with === null) {
+    state.conversations = await get("/messages");
+    return;
+  }
+  try {
+    state.chat = await get("/messages?with=" + encodeURIComponent(address.with));
+  } catch (error) {
+    state.chat = false;   // there is no one with that name
+    return;
+  }
+  if (state.chat.messages.some((message) => !message.from_me && !message.read)) {
+    const { answer } = await send("POST", "/messages/read", { with: state.chat.with });
     if (answer) {
       setMe(answer);
     }
@@ -231,6 +270,7 @@ async function catchUp() {
       await checkProfile();
       await checkSearch();
       await checkNotifications();
+      await checkMessages();
       if (document.getElementById("status").textContent === CANNOT_REACH) {
         showStatus("");
       }
@@ -384,6 +424,8 @@ document.getElementById("log-out").addEventListener("click", async () => {
   await send("POST", "/logout");
   setMe(NOBODY);
   state.bookmarks = [];
+  state.conversations = [];
+  state.chat = null;
   await checkLikes().catch(() => {});
   changed();
   toast("You are logged out");
@@ -412,6 +454,30 @@ searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
   location.hash = exploreLink(searchBox.value.trim());
 });
+// Sending a message. Enter sends; Shift+Enter makes a new line.
+messageText.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    messageForm.requestSubmit();
+  }
+});
+messageForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (messageText.value.trim() === "" || !state.chat) {
+    return;
+  }
+  messageSend.disabled = true;
+  const { error } = await send("POST", "/messages", { to: state.chat.with, text: messageText.value });
+  messageSend.disabled = false;
+  if (error) {
+    showStatus(error);
+    return;
+  }
+  messageText.value = "";
+  messageText.focus();
+  await catchUp();
+});
+
 sideSearch.addEventListener("submit", (event) => {
   event.preventDefault();
   location.hash = exploreLink(sideSearchBox.value.trim());
@@ -421,6 +487,7 @@ sideSearch.addEventListener("submit", (event) => {
 // A new address: draw its screen, and ask for the profile or the search if it is one.
 async function addressChanged() {
   state.profile = null;
+  state.chat = null;
   const address = readAddress();
   if (address.screen === "explore") {
     searchBox.value = address.query;
@@ -430,7 +497,12 @@ async function addressChanged() {
   await checkProfile().catch(() => {});
   await checkSearch();
   await checkNotifications().catch(() => {});
+  await checkMessages().catch(() => {});
   changed();
+  if (readAddress().screen === "messages" && readAddress().with) {
+    window.scrollTo(0, document.body.scrollHeight);
+    messageText.focus();
+  }
 }
 
 window.addEventListener("hashchange", addressChanged);

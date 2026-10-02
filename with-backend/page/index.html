@@ -26,6 +26,7 @@
         <li><a class="nav-link" href="#/" data-screen="home"><span data-icon="home"></span><span class="nav-label">Home</span></a></li>
         <li><a class="nav-link" href="#/explore" data-screen="explore"><span data-icon="hash"></span><span class="nav-label">Explore</span></a></li>
         <li><a class="nav-link" href="#/notifications" data-screen="notifications" data-needs-login hidden><span class="nav-icon"><span data-icon="bell"></span><span class="badge" id="nav-badge" hidden></span></span><span class="nav-label">Notifications</span></a></li>
+        <li><a class="nav-link" href="#/messages" data-screen="messages" data-needs-login hidden><span class="nav-icon"><span data-icon="mail"></span><span class="badge" id="nav-messages-badge" hidden></span></span><span class="nav-label">Messages</span></a></li>
         <li><a class="nav-link" href="#/bookmarks" data-screen="bookmarks" data-needs-login hidden><span data-icon="bookmark"></span><span class="nav-label">Bookmarks</span></a></li>
         <li><a class="nav-link" id="nav-profile" href="#/" data-screen="profile" hidden><span data-icon="user"></span><span class="nav-label">Profile</span></a></li>
       </ul>
@@ -76,6 +77,14 @@
       </form>
 
       <div id="screen"></div>
+
+      <!-- The box for a message, at the bottom of a conversation. Like the post box, it stays
+           outside #screen, so that what you type is kept while new messages arrive. -->
+      <form id="message-form" class="message-form" hidden>
+        <label for="message-text" class="visually-hidden">Your message</label>
+        <textarea id="message-text" rows="1" placeholder="Start a new message" maxlength="1000"></textarea>
+        <button type="submit" class="icon-button send-button" id="message-send" aria-label="Send"><span data-icon="send"></span></button>
+      </form>
     </main>
 
     <!-- Right: the sidebar. Hidden on small screens. -->

@@ -2,7 +2,7 @@
 // { title, breadcrumb, tabs, nodes }. main.js puts it on the page.
 
 import { icon } from "./icons.js";
-import { exploreLink, monthYear, postLink, profileLink, shortTime } from "./format.js";
+import { exploreLink, fullTime, messagesLink, monthYear, postLink, profileLink, shortTime } from "./format.js";
 import { avatar, element, emptyNote, link, postCard, thread } from "./render.js";
 import { byAuthor, isFollowed, isMe, isShown, newestFirst, repliesTo, state } from "./state.js";
 
@@ -40,6 +40,65 @@ export function homeScreen(address) {
     ],
     nodes: nodes,
   };
+}
+
+// ---- Messages: your conversations, and one conversation ----
+
+export function messagesScreen(address) {
+  if (address.with) {
+    return chatScreen(address.with);
+  }
+  const nodes = state.conversations.map((talk) => {
+    const row = link(messagesLink(talk.name), "conversation" + (talk.unread > 0 ? " unread" : ""));
+    const words = element("span", "conversation-words");
+    const top = element("span", "conversation-top");
+    top.append(element("span", "conversation-name", talk.name),
+               element("span", "conversation-time", " · " + shortTime(talk.sent_at)));
+    words.append(top, element("span", "conversation-last", (talk.from_me ? "You: " : "") + talk.text));
+    row.append(avatar(talk.name, "normal", false), words);
+    if (talk.unread > 0) {
+      row.append(element("span", "conversation-dot", String(talk.unread)));
+    }
+    return row;
+  });
+  if (nodes.length === 0) {
+    nodes.push(emptyNote("Welcome to your inbox", "To start a conversation, open someone's profile and press Message."));
+  }
+  return { title: "Messages", breadcrumb: ["Timeline", "Messages"], tabs: [], nodes: nodes };
+}
+
+function chatScreen(name) {
+  const back = link(messagesLink(), "back-link");
+  back.append(icon("back"), document.createTextNode("All conversations"));
+  const nodes = [back];
+  const chat = state.chat && state.chat.with.toLowerCase() === name.toLowerCase() ? state.chat : null;
+  const shownName = chat ? chat.with : name;
+  if (chat === null) {
+    nodes.push(emptyNote(state.chat === false ? "There is no one called " + name : "Loading…"));
+  } else {
+    const who = link(profileLink(shownName), "chat-who");
+    who.append(avatar(shownName, "big", false), element("span", "chat-who-name", shownName),
+               element("span", "chat-who-handle", "@" + shownName));
+    nodes.push(who);
+    const list = element("div", "chat");
+    chat.messages.forEach((message, index) => {
+      const bubble = element("div", "message" + (message.from_me ? " mine" : ""));
+      bubble.append(element("p", "message-text", message.text));
+      const isLast = index === chat.messages.length - 1;
+      const time = element("p", "message-time", shortTime(message.sent_at));
+      time.title = fullTime(message.sent_at);
+      if (isLast && message.from_me && message.read) {
+        time.append(document.createTextNode(" · Seen"));
+      }
+      bubble.append(time);
+      list.append(bubble);
+    });
+    if (chat.messages.length === 0) {
+      list.append(element("p", "chat-empty", "Say hello to " + shownName + "."));
+    }
+    nodes.push(list);
+  }
+  return { title: shownName, breadcrumb: ["Timeline", "Messages"], tabs: [], nodes: nodes };
 }
 
 // ---- Notifications: what happened to you ----
@@ -207,6 +266,11 @@ function profileHeader(name, person) {
     edit.addEventListener("click", profileHandlers.edit);
     top.append(edit);
   } else if (person && state.me !== null) {
+    const message = link(messagesLink(person.name), "icon-button icon-button-outline");
+    message.setAttribute("aria-label", "Message " + person.name);
+    message.title = "Message";
+    message.append(icon("mail"));
+    top.append(message);
     const follow = element("button", person.you_follow ? "button button-outline" : "button",
                            person.you_follow ? "Following" : "Follow");
     follow.type = "button";

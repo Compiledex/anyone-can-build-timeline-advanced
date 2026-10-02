@@ -766,6 +766,54 @@ class ModelTests(unittest.TestCase):
         everyone = [row["name"] for row in model.suggestions(self.db_path, None)]
         self.assertEqual(everyone, ["Chen", "Ben", "Aiko"])   # for a visitor: the most followed
 
+    # ---- Direct messages ----
+
+    def test_send_and_read_messages(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.send_message(self.db_path, aiko, "ben", " Are you going to Kyoto on Saturday? ")
+        model.send_message(self.db_path, ben, "Aiko", "Yes! 7:10 train.")
+        person, rows = model.conversation(self.db_path, aiko, "Ben")
+        self.assertEqual(person["name"], "Ben")
+        self.assertEqual([(view.message_to_json(row)["from_me"], row["text"]) for row in rows],
+                         [(True, "Are you going to Kyoto on Saturday?"), (False, "Yes! 7:10 train.")])
+
+    def test_only_the_two_people_can_read_a_conversation(self):
+        aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
+        model.send_message(self.db_path, aiko, "Ben", "a secret")
+        self.assertEqual(model.conversation(self.db_path, chen, "Ben")[1], [])
+        self.assertEqual(model.conversation(self.db_path, chen, "Aiko")[1], [])
+        self.assertEqual(model.conversations(self.db_path, chen), [])
+
+    def test_the_conversation_list_has_the_newest_message_and_the_unread_count(self):
+        aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
+        model.send_message(self.db_path, ben, "Aiko", "hi")
+        model.send_message(self.db_path, ben, "Aiko", "are you there?")
+        model.send_message(self.db_path, chen, "Aiko", "hello!")
+        model.send_message(self.db_path, aiko, "Chen", "hey Chen")
+        rows = view.conversations_to_json(model.conversations(self.db_path, aiko))
+        self.assertEqual([(r["name"], r["text"], r["from_me"], r["unread"]) for r in rows],
+                         [("Chen", "hey Chen", True, 1), ("Ben", "are you there?", False, 2)])
+        self.assertEqual(model.unread_messages(self.db_path, aiko), 3)
+        model.read_conversation(self.db_path, aiko, "Ben")
+        self.assertEqual(model.unread_messages(self.db_path, aiko), 1)
+
+    def test_message_rules(self):
+        aiko = self.user("Aiko")
+        self.user("Ben")
+        for to, text in [("Aiko", "talking to myself"), ("Nobody", "hello"), ("Ben", "   "),
+                         ("Ben", "a" * 1001)]:
+            with self.assertRaises(model.RuleBroken):
+                model.send_message(self.db_path, aiko, to, text)
+        model.send_message(self.db_path, aiko, "Ben", "a" * 1000)
+
+    def test_the_database_itself_refuses_a_message_to_yourself(self):
+        self.user("Aiko")
+        connection = model.connect(self.db_path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute("INSERT INTO messages (sender_id, receiver_id, text, sent_at) "
+                               "VALUES (1, 1, 'hi', 'now')")
+        connection.close()
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -858,7 +906,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_sign_up_post_then_get(self):
         aiko = self.signed_up("Aiko")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": []}))
         status, post = self.send(aiko, "POST", "/posts", {"text": "hello"})
         self.assertEqual((status, post["author"]), (201, "Aiko"))
         status, posts = self.send(self.browser(), "GET", "/posts?after=0")  # anyone can read
@@ -875,7 +923,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_without_logging_in_you_can_read_but_not_write(self):
         stranger = self.browser()
-        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": []}))
         for method, path, data in [("POST", "/posts", {"text": "hello"}),
                                    ("POST", "/likes", {"post_id": 1}),
                                    ("PUT", "/posts", {"post_id": 1, "text": "hi"}),
@@ -887,12 +935,12 @@ class RealServerTest(unittest.TestCase):
     def test_log_out_then_log_in(self):
         aiko = self.signed_up("Aiko")
         self.send(aiko, "POST", "/logout")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": []}))
         self.assertEqual(self.send(aiko, "POST", "/posts", {"text": "hello"})[0], 401)
         status, _ = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": "wrong one"})
         self.assertEqual(status, 400)
         status, me = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": PASSWORD})
-        self.assertEqual((status, me), (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
+        self.assertEqual((status, me), (200, {"name": "Aiko", "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": []}))
 
     def test_like_unlike_and_who_liked(self):
         aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
@@ -943,11 +991,11 @@ class RealServerTest(unittest.TestCase):
         self.signed_up("Ben")
         self.assertEqual(self.send(self.browser(), "POST", "/follows", {"name": "Ben"})[0], 401)
         self.assertEqual(self.send(aiko, "POST", "/follows", {"name": "ben"}),
-                         (201, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": ["Ben"]}))
+                         (201, {"name": "Aiko", "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": ["Ben"]}))
         self.assertTrue(self.send(aiko, "GET", "/users?name=Ben")[1]["you_follow"])
         self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
         self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
-                         (200, {"name": "Aiko", "unread_notifications": 0, "bio": "", "avatar": None, "following": []}))
+                         (200, {"name": "Aiko", "unread_notifications": 0, "unread_messages": 0, "bio": "", "avatar": None, "following": []}))
 
 
     def open_events(self):
@@ -1104,6 +1152,20 @@ class RealServerTest(unittest.TestCase):
         status, side = self.send(aiko, "GET", "/sidebar")
         self.assertEqual((status, side["trends"]), (200, [{"tag": "hirakata", "posts": 1}]))
         self.assertEqual([person["name"] for person in side["suggestions"]], ["Ben"])
+
+
+    def test_messages_over_http(self):
+        aiko, ben, chen = self.signed_up("Aiko"), self.signed_up("Ben"), self.signed_up("Chen")
+        self.assertEqual(self.send(self.browser(), "GET", "/messages")[0], 401)
+        status, sent = self.send(aiko, "POST", "/messages", {"to": "Ben", "text": "hi Ben"})
+        self.assertEqual((status, sent["from_me"], sent["text"]), (201, True, "hi Ben"))
+        self.assertEqual(self.send(ben, "GET", "/me")[1]["unread_messages"], 1)
+        status, chat = self.send(ben, "GET", "/messages?with=aiko")
+        self.assertEqual((status, chat["with"], [m["text"] for m in chat["messages"]]), (200, "Aiko", ["hi Ben"]))
+        self.assertEqual(self.send(chen, "GET", "/messages?with=Aiko")[1]["messages"], [])   # not Chen's
+        status, me = self.send(ben, "POST", "/messages/read", {"with": "Aiko"})
+        self.assertEqual((status, me["unread_messages"]), (200, 0))
+        self.assertEqual([c["name"] for c in self.send(ben, "GET", "/messages")[1]], ["Aiko"])
 
 
 if __name__ == "__main__":
