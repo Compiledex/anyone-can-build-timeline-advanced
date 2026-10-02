@@ -54,3 +54,9 @@ def like_counts_to_json(rows):
 def post_to_log_line(row):
     """One line for the terminal: when the post was written, who wrote it, and what it says."""
     return f"{row['posted_at']}  {row['author']}: {row['text']}"
+
+
+def search_to_json(post_ids, people):
+    return {"post_ids": post_ids,
+            "people": [{"name": row["name"], "bio": row["bio"], "avatar": upload_url(row["avatar_file"])}
+                       for row in people]}

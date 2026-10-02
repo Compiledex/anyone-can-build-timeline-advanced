@@ -7,11 +7,11 @@
 
 import { CANNOT_REACH, get, onLoggedOut, send, showStatus, toast } from "./api.js";
 import { onProfileSaved, onSent, openEditProfile, openLogin, openWrite, updateCount } from "./dialogs.js";
-import { postLink, profileLink, readAddress } from "./format.js";
+import { exploreLink, postLink, profileLink, readAddress } from "./format.js";
 import { fillIcons } from "./icons.js";
 import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
-import { homeScreen, postScreen, profileHandlers, profileScreen, sidebar } from "./screens.js";
+import { exploreScreen, homeScreen, postScreen, profileHandlers, profileScreen, sidebar } from "./screens.js";
 import {
   addPosts, changed, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
 } from "./state.js";
@@ -38,7 +38,9 @@ function updateComposeCount() {
 const sidebarHolder = document.getElementById("sidebar");
 const joinBar = document.getElementById("join-bar");
 
-const SCREENS = { home: homeScreen, post: postScreen, profile: profileScreen };
+const SCREENS = { home: homeScreen, post: postScreen, profile: profileScreen, explore: exploreScreen };
+const searchForm = document.getElementById("search-form");
+const searchBox = document.getElementById("search-box");
 
 function draw() {
   const address = readAddress();
@@ -67,6 +69,7 @@ function draw() {
     return made;
   }));
   compose.hidden = address.screen !== "home" || state.me === null;
+  searchForm.hidden = address.screen !== "explore";
   screenHolder.replaceChildren(...shown.nodes);
   sidebarHolder.replaceChildren(...sidebar(openLogin));
   drawMenu(address);
@@ -85,7 +88,7 @@ function drawMenu(address) {
   const ownProfile = address.screen === "profile" && state.me !== null &&
     address.name.toLowerCase() === state.me.toLowerCase();
   for (const item of document.querySelectorAll(".nav-link")) {
-    const current = (item.dataset.screen === "home" && address.screen === "home") ||
+    const current = (item.dataset.screen === address.screen && address.screen !== "profile") ||
       (item.dataset.screen === "profile" && ownProfile);
     if (current) {
       item.setAttribute("aria-current", "page");
@@ -144,6 +147,18 @@ async function checkProfile() {
   }
 }
 
+async function checkSearch() {
+  const address = readAddress();
+  if (address.screen !== "explore" || address.query === "") {
+    return;
+  }
+  try {
+    state.search = { query: address.query, ...(await get("/search?q=" + encodeURIComponent(address.query))) };
+  } catch (error) {
+    state.search = { query: address.query, error: error.message };
+  }
+}
+
 // ---- Live updates ----
 // The page keeps one connection open to /events: this is Server-Sent Events, and the browser's
 // EventSource does the work. The server sends "changed" each time anyone changes anything, and
@@ -170,6 +185,7 @@ async function catchUp() {
       await checkLikes();
       await checkChanges();
       await checkProfile();
+      await checkSearch();
       if (document.getElementById("status").textContent === CANNOT_REACH) {
         showStatus("");
       }
@@ -317,19 +333,32 @@ document.addEventListener("click", (event) => {
   }
 });
 
-// A new address: draw its screen, and ask for the profile if it is one.
-window.addEventListener("hashchange", async () => {
+// A search: its words go into the address, so Back works and the search can be shared.
+searchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  location.hash = exploreLink(searchBox.value.trim());
+});
+
+// A new address: draw its screen, and ask for the profile or the search if it is one.
+async function addressChanged() {
   state.profile = null;
+  const address = readAddress();
+  if (address.screen === "explore") {
+    searchBox.value = address.query;
+  }
   draw();
   window.scrollTo(0, 0);
   await checkProfile().catch(() => {});
+  await checkSearch();
   changed();
-});
+}
+
+window.addEventListener("hashchange", addressChanged);
 
 // Times like "5m" grow older: draw again every minute.
 setInterval(changed, 60 * 1000);
 
 fillIcons();
 updateComposeCount();
-draw();
+addressChanged();
 listen();

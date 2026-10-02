@@ -596,6 +596,68 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(model.RuleBroken):
             model.save_post(self.db_path, ben, "So true!", reply_to=1, quote_of=1)
 
+    # ---- Hashtags, mentions and search ----
+
+    def test_tags_are_found_in_any_language_and_kept_in_small_letters(self):
+        self.assertEqual(model.tags_in("Off to #Kyoto! #kyoto #漢字 #JLPT_N3 and # not"),
+                         ["jlpt_n3", "kyoto", "漢字"])
+        self.assertEqual(model.mentions_in("thanks @Ben and @ben, and @結衣!"), ["Ben", "結衣"])
+        self.assertEqual(model.mentions_in("write to aiko@example.com"), [])
+        self.assertEqual(model.tags_in("page#2"), [])
+
+    def test_names_have_only_letters_numbers_and_underscores(self):
+        for good in ["Aiko", "ben_2", "結衣"]:
+            model.sign_up(self.db_path, good, PASSWORD)
+        for wrong in ["Aiko Tanaka", "ben!", "@chen", "a/b"]:
+            with self.assertRaises(model.RuleBroken):
+                model.sign_up(self.db_path, wrong, PASSWORD)
+
+    def test_search_by_tag(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "Fushimi Inari at 8am #Kyoto")
+        model.save_post(self.db_path, aiko, "Ramen in #Osaka")
+        model.save_post(self.db_path, aiko, "Back to #kyoto next week")
+        self.assertEqual(model.search(self.db_path, "#KYOTO"), ([3, 1], []))
+
+    def test_editing_or_deleting_a_post_changes_its_tags(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "Trip to #Nara")
+        model.edit_post(self.db_path, aiko, 1, "Trip to #Kyoto")
+        self.assertEqual(model.search(self.db_path, "#nara")[0], [])
+        self.assertEqual(model.search(self.db_path, "#kyoto")[0], [1])
+        model.delete_post(self.db_path, aiko, 1)
+        self.assertEqual(model.search(self.db_path, "#kyoto")[0], [])
+
+    def test_search_by_words_finds_posts_and_people(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.edit_profile(self.db_path, ben, "I love ramen")
+        model.save_post(self.db_path, aiko, "Ramen in Osaka")
+        model.save_post(self.db_path, aiko, "Curry at lunch")
+        post_ids, people = model.search(self.db_path, "ramen")
+        self.assertEqual(post_ids, [1])
+        self.assertEqual([person["name"] for person in people], ["Ben"])
+
+    def test_percent_and_underscore_are_ordinary_letters_in_a_search(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "100% done")
+        model.save_post(self.db_path, aiko, "1000 done")
+        self.assertEqual(model.search(self.db_path, "0%")[0], [1])
+
+    def test_an_empty_search_is_refused(self):
+        for wrong in ["", "   ", None, "a" * 101]:
+            with self.assertRaises(model.RuleBroken):
+                model.search(self.db_path, wrong)
+
+    def test_older_posts_get_their_tags_when_the_server_starts(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "Old post about #Nara")
+        connection = model.connect(self.db_path)
+        connection.execute("DROP TABLE post_tags")   # as before tags were kept
+        connection.commit()
+        connection.close()
+        model.create_tables(self.db_path)
+        self.assertEqual(model.search(self.db_path, "#nara")[0], [1])
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -893,6 +955,16 @@ class RealServerTest(unittest.TestCase):
         self.assertIsNotNone(undone["deleted_at"])
         status, quote = self.send(ben, "POST", "/posts", {"text": "So true!", "quote_of": 1})
         self.assertEqual((status, quote["quote_of"]), (201, 1))
+
+
+    def test_search_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.send(aiko, "POST", "/posts", {"text": "Hello #Hirakata"})
+        status, found = self.send(self.browser(), "GET", "/search?q=%23hirakata")
+        self.assertEqual((status, found["post_ids"]), (200, [1]))
+        status, found = self.send(self.browser(), "GET", "/search?q=aik")
+        self.assertEqual(found["people"], [{"name": "Aiko", "bio": "", "avatar": None}])
+        self.assertEqual(self.send(self.browser(), "GET", "/search?q=")[0], 400)
 
 
 if __name__ == "__main__":

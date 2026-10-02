@@ -2,7 +2,7 @@
 // { title, breadcrumb, tabs, nodes }. main.js puts it on the page.
 
 import { icon } from "./icons.js";
-import { monthYear, profileLink } from "./format.js";
+import { exploreLink, monthYear, profileLink } from "./format.js";
 import { avatar, element, emptyNote, link, postCard, thread } from "./render.js";
 import { byAuthor, isFollowed, isMe, isShown, newestFirst, repliesTo, state } from "./state.js";
 
@@ -35,6 +35,47 @@ export function homeScreen(address) {
     ],
     nodes: nodes,
   };
+}
+
+// ---- Explore: search for posts, people and #tags ----
+
+export function exploreScreen(address) {
+  const nodes = [];
+  const query = address.query;
+  const title = query.startsWith("#") && query.length > 1 ? query : "Explore";
+  if (query === "") {
+    nodes.push(emptyNote("Search Timeline", "Find posts, people and #tags. Try #kyoto or #kanji."));
+  } else if (!state.search || state.search.query !== query) {
+    nodes.push(emptyNote("Searching…"));
+  } else if (state.search.error) {
+    nodes.push(emptyNote("Nothing to search for", state.search.error));
+  } else {
+    if (state.search.people.length > 0) {
+      nodes.push(element("h2", "section-title", "People"));
+      nodes.push(...state.search.people.map(personRow));
+    }
+    const posts = state.search.post_ids.map((id) => state.posts.get(id)).filter((post) => post && isShown(post));
+    if (posts.length > 0) {
+      nodes.push(element("h2", "section-title", "Posts"));
+      nodes.push(...posts.map((post) => postCard(post, { replyingTo: true })));
+    }
+    if (nodes.length === 0) {
+      nodes.push(emptyNote("No results for " + query, "Try other words, or a #tag."));
+    }
+  }
+  return { title: title, breadcrumb: ["Timeline", "Explore"], tabs: [], nodes: nodes };
+}
+
+// A person in a list: avatar, name, @name and bio, the whole row a link to their profile.
+export function personRow(person) {
+  const row = link(profileLink(person.name), "person-row");
+  const words = element("span", "person-words");
+  words.append(element("span", "person-name", person.name), element("span", "person-handle", "@" + person.name));
+  if (person.bio) {
+    words.append(element("span", "person-bio", person.bio));
+  }
+  row.append(avatar(person.name, "normal", false), words);
+  return row;
 }
 
 // ---- One post, with the posts it answers above it and its replies below ----

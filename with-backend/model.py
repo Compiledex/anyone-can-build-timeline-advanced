@@ -9,6 +9,7 @@ The tables:
   likes     one row for each post and user who liked it
   follows   one row for each person and someone they follow
   uploads   each uploaded picture; the file itself is in the uploads folder
+  post_tags each #tag in each post, so that tags can be found fast
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -18,6 +19,7 @@ that says which rule.
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -32,6 +34,12 @@ MIN_PASSWORD = 8
 MAX_PASSWORD = 200
 MAX_BIO = 160
 MAX_UPLOAD = 2 * 1024 * 1024   # 2 MB for one picture
+MAX_QUERY = 100
+
+# A #tag or an @name: letters (of any language), numbers and _. \w means exactly that.
+# (?<!\w): only when no letter comes right before, so "a@b.c" has no @name in it.
+TAG = re.compile(r"(?<!\w)#(\w{1,50})")
+MENTION = re.compile(r"(?<!\w)@(\w{1,40})")
 
 # The pictures that may be uploaded, known by their first bytes, never by their name:
 # a file called "photo.jpg" can be anything. SVG is not here, because it can hold code.
@@ -78,6 +86,8 @@ def create_tables(db_path):
         connection.close()
         raise SystemExit("timeline.db was made by an older version of Timeline, without accounts. "
                          "Run `make reset`, then start the server again.")
+    had_tags = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'post_tags'").fetchone()
     connection.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
@@ -137,6 +147,14 @@ def create_tables(db_path):
     # so that a repost can be undone and done again. Even code that skips the model cannot break it.
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_repost_each ON posts (author_id, repost_of) "
                        "WHERE repost_of IS NOT NULL AND deleted_at IS NULL")
+    # Each #tag in each post, in small letters, so that a tag can be found fast.
+    connection.execute("CREATE TABLE IF NOT EXISTS post_tags ("
+                       "post_id INTEGER NOT NULL REFERENCES posts(id), tag TEXT NOT NULL, "
+                       "PRIMARY KEY (post_id, tag))")
+    if not had_tags:
+        # Posts written before tags were kept: find their tags now.
+        for post in connection.execute("SELECT id, text FROM posts WHERE deleted_at IS NULL").fetchall():
+            save_tags(connection, post["id"], post["text"])
     connection.commit()
     connection.close()
 
@@ -172,6 +190,9 @@ def check_name(name):
         raise RuleBroken("The name must not be empty.")
     if len(name) > MAX_NAME:
         raise RuleBroken(f"The name must be {MAX_NAME} characters or fewer.")
+    # So that @name always works. \w is any letter (in any language), number or _.
+    if not re.fullmatch(r"\w+", name):
+        raise RuleBroken("A name may only have letters, numbers and _, with no spaces.")
     return name
 
 
@@ -558,6 +579,7 @@ def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=
             "INSERT INTO posts (author_id, text, posted_at, reply_to, picture_id, quote_of) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (user_id, text, posted_at or now(), reply_to, picture_id, quote_of))
+        save_tags(connection, cursor.lastrowid, text)
         connection.commit()
         return find_post(connection, cursor.lastrowid)
     finally:
@@ -576,6 +598,7 @@ def edit_post(db_path, user_id, post_id, text):
         text = check_text(text, has_picture=post["picture_id"] is not None)
         connection.execute("UPDATE posts SET text = ?, edited_at = ? WHERE id = ?",
                            (text, now(), post_id))
+        save_tags(connection, post_id, text)
         connection.commit()
         return find_post(connection, post_id)
     finally:
@@ -593,6 +616,7 @@ def delete_post(db_path, user_id, post_id):
         if post["author_id"] != user_id:
             raise RuleBroken("You can only delete your own post.")
         connection.execute("DELETE FROM likes WHERE post_id = ?", (post_id,))
+        connection.execute("DELETE FROM post_tags WHERE post_id = ?", (post_id,))
         connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ?, "
                            "picture_id = NULL WHERE id = ?", (now(), post_id))
         if post["picture_id"] is not None:
@@ -600,6 +624,57 @@ def delete_post(db_path, user_id, post_id):
         connection.commit()
         return connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id = ?",
                                   (post_id,)).fetchone()
+    finally:
+        connection.close()
+
+
+def tags_in(text):
+    """The #tags in a text, in small letters, each once: "#Kyoto trip #kyoto" → ["kyoto"]."""
+    return sorted({tag.lower() for tag in TAG.findall(text)})
+
+
+def mentions_in(text):
+    """The @names in a text, each once, as written."""
+    seen = {}
+    for name in MENTION.findall(text):
+        seen.setdefault(name.lower(), name)
+    return list(seen.values())
+
+
+def save_tags(connection, post_id, text):
+    """Keep a post's #tags in post_tags, in place of the ones it had before."""
+    connection.execute("DELETE FROM post_tags WHERE post_id = ?", (post_id,))
+    connection.executemany("INSERT INTO post_tags (post_id, tag) VALUES (?, ?)",
+                           [(post_id, tag) for tag in tags_in(text)])
+
+
+def search(db_path, query):
+    """Find posts and people. "#kyoto" finds posts with that tag; anything else finds posts with
+    those words, and people whose name or bio has them. Returns (post ids, people), newest first."""
+    query = query.strip() if isinstance(query, str) else ""
+    if query == "":
+        raise RuleBroken("Type something to search for.")
+    if len(query) > MAX_QUERY:
+        raise RuleBroken(f"A search must be {MAX_QUERY} characters or fewer.")
+    connection = connect(db_path)
+    try:
+        if query.startswith("#"):
+            posts = connection.execute(
+                "SELECT posts.id FROM post_tags JOIN posts ON posts.id = post_tags.post_id "
+                "WHERE post_tags.tag = ? AND posts.deleted_at IS NULL ORDER BY posts.id DESC LIMIT 100",
+                (query[1:].lower(),)).fetchall()
+            return [row["id"] for row in posts], []
+        # In LIKE, % and _ mean "anything"; a \ in front makes them ordinary letters again.
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        posts = connection.execute(
+            "SELECT id FROM posts WHERE text LIKE ? ESCAPE '\\' AND deleted_at IS NULL "
+            "AND repost_of IS NULL ORDER BY id DESC LIMIT 100", (pattern,)).fetchall()
+        found = connection.execute(
+            "SELECT users.name, users.bio, avatars.file_name AS avatar_file FROM users "
+            "LEFT JOIN uploads AS avatars ON avatars.id = users.avatar_id "
+            "WHERE users.name LIKE ? ESCAPE '\\' OR users.bio LIKE ? ESCAPE '\\' "
+            "ORDER BY users.name COLLATE NOCASE LIMIT 20", (pattern, pattern)).fetchall()
+        return [row["id"] for row in posts], found
     finally:
         connection.close()
 

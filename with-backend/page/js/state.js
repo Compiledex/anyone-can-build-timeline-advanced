@@ -12,6 +12,7 @@ export const state = {
   replies: new Map(),     // post id → the replies to it, oldest first
   likes: new Map(),       // post id → { likes, you_liked }
   profile: null,          // the profile on screen, as the server sent it
+  search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
 };
 
 const listeners = [];

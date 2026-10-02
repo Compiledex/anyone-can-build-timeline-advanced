@@ -3,7 +3,7 @@
 // so a post is always shown as words and can never run code on the page.
 
 import { icon } from "./icons.js";
-import { avatarColour, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
+import { avatarColour, exploreLink, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
 import {
   avatarOf, isMe, isShown, likesOf, replyCount, repliesTo, repostCount, state, youReposted,
 } from "./state.js";
@@ -59,9 +59,31 @@ export function avatar(name, size = "normal", asLink = true, picture = undefined
   return made;
 }
 
-// A post's words.
+// A post's words, with #tags, @names and web addresses made into links.
+// Each piece is added as text or as a link with text, never as HTML.
+// A # or @ starts a link only when no letter comes right before it, so "a@b.c" stays plain.
+const LINKABLE = /(https?:\/\/[^\s<>"]*[^\s<>".,!?)])|(?<![\p{L}\p{N}_])([#@])([\p{L}\p{N}_]{1,50})/gu;
+
 export function postText(text) {
-  return document.createTextNode(text);
+  const words = document.createDocumentFragment();
+  let from = 0;
+  for (const found of text.matchAll(LINKABLE)) {
+    words.append(document.createTextNode(text.slice(from, found.index)));
+    if (found[1]) {
+      // Only http and https addresses come here, so a link can never run code.
+      const outside = link(found[1], "post-link", found[1]);
+      outside.target = "_blank";
+      outside.rel = "noopener noreferrer nofollow";
+      words.append(outside);
+    } else if (found[2] === "#") {
+      words.append(link(exploreLink("#" + found[3]), "post-link", "#" + found[3]));
+    } else {
+      words.append(link(profileLink(found[3]), "post-link", "@" + found[3]));
+    }
+    from = found.index + found[0].length;
+  }
+  words.append(document.createTextNode(text.slice(from)));
+  return words;
 }
 
 // One post. options.preview: no buttons (inside a window). options.big: the post on its own page.
@@ -172,7 +194,7 @@ function quoteBox(quoted) {
               element("span", "post-dot", "·"), element("span", "post-time", shortTime(quoted.posted_at)));
   box.append(head);
   if (quoted.text) {
-    box.append(element("span", "quote-text", quoted.text));
+    box.append(element("span", "quote-text", quoted.text));   // plain words: the whole box is one link
   }
   if (quoted.picture) {
     box.append(postPicture(quoted));

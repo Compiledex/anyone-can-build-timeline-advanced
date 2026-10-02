@@ -135,6 +135,10 @@ class TimelineHandler(BaseHTTPRequestHandler):
             model.set_avatar(self.db, user["id"], data["avatar_id"])
         self.send_me(200, model.current_user(self.db, self.session_token()))
 
+    def get_search(self, query):
+        post_ids, people = model.search(self.db, query.get("q", [""])[0])
+        self.send_json(200, view.search_to_json(post_ids, people))
+
     def get_people(self, query):
         self.send_json(200, view.people_to_json(model.people(self.db)))
 
@@ -346,6 +350,7 @@ ROUTES = {
     ("GET", "/me"): TimelineHandler.get_me,
     ("PUT", "/me"): TimelineHandler.put_me,
     ("GET", "/people"): TimelineHandler.get_people,
+    ("GET", "/search"): TimelineHandler.get_search,
     ("POST", "/uploads"): TimelineHandler.post_uploads,
     ("GET", "/users"): TimelineHandler.get_users,
     ("POST", "/follows"): TimelineHandler.post_follows,

@@ -63,6 +63,7 @@ export function avatarColour(name) {
 //   #/              Home, everyone          #/following      Home, people you follow
 //   #/@Ben          Ben's posts             #/@Ben/replies   Ben's replies
 //   #/post/12       post 12, with its replies
+//   #/explore       the search page        #/explore/%23kyoto  what a search for #kyoto found
 
 export function profileLink(name, tab = "") {
   return "#/@" + encodeURIComponent(name) + (tab ? "/" + tab : "");
@@ -72,15 +73,25 @@ export function postLink(id) {
   return "#/post/" + id;
 }
 
+export function exploreLink(query = "") {
+  return "#/explore" + (query ? "/" + encodeURIComponent(query) : "");
+}
+
+function decode(part) {
+  try {
+    return decodeURIComponent(part);
+  } catch (error) {
+    return part;   // a broken address, like "#/@%": use it as it is
+  }
+}
+
 // What the address asks for, as { screen, … }.
 export function readAddress() {
-  const parts = location.hash.replace(/^#\/?/, "").split("/").map((part) => {
-    try {
-      return decodeURIComponent(part);
-    } catch (error) {
-      return part;   // a broken address, like "#/@%": use it as it is
-    }
-  });
+  const raw = location.hash.replace(/^#\/?/, "");
+  if (raw === "explore" || raw.startsWith("explore/")) {
+    return { screen: "explore", query: decode(raw.slice("explore/".length)).trim() };
+  }
+  const parts = raw.split("/").map(decode);
   if (parts[0].startsWith("@") && parts[0].length > 1) {
     return { screen: "profile", name: parts[0].slice(1), tab: parts[1] === "replies" ? "replies" : "posts" };
   }

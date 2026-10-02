@@ -24,6 +24,7 @@
       </a>
       <ul class="nav-list">
         <li><a class="nav-link" href="#/" data-screen="home"><span data-icon="home"></span><span class="nav-label">Home</span></a></li>
+        <li><a class="nav-link" href="#/explore" data-screen="explore"><span data-icon="hash"></span><span class="nav-label">Explore</span></a></li>
         <li><a class="nav-link" id="nav-profile" href="#/" data-screen="profile" hidden><span data-icon="user"></span><span class="nav-label">Profile</span></a></li>
       </ul>
       <button type="button" id="nav-post" class="nav-post" hidden>
@@ -46,6 +47,11 @@
           <p class="breadcrumb" id="breadcrumb"></p>
           <h1 class="page-title" id="page-title">Home</h1>
         </div>
+        <form id="search-form" class="search-form" role="search" hidden>
+          <span data-icon="search"></span>
+          <label for="search-box" class="visually-hidden">Search</label>
+          <input id="search-box" type="search" placeholder="Search posts, people and #tags" maxlength="100" autocomplete="off">
+        </form>
         <nav class="tabs" id="tabs" aria-label="Timelines" hidden></nav>
       </header>
 
