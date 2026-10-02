@@ -839,7 +839,7 @@ def notifications_of(db_path, user_id):
         "SELECT notifications.id, notifications.kind, users.name AS actor, notifications.post_id, "
         "notifications.created_at, notifications.read_at FROM notifications "
         "JOIN users ON users.id = notifications.actor_id WHERE notifications.user_id = ? "
-        "ORDER BY notifications.id DESC LIMIT 100", (user_id,)).fetchall()
+        "ORDER BY notifications.created_at DESC, notifications.id DESC LIMIT 100", (user_id,)).fetchall()
     connection.close()
     return rows
 
