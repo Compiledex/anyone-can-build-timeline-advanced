@@ -22,6 +22,7 @@ This is a copy of the simple Timeline, which is kept as it was in its own reposi
 | `with-backend/model.py` | The **model**: every rule, and the only code that reads or writes the database and the uploads folder. |
 | `with-backend/view.py` | The **view**: turns database rows into the JSON the page reads. |
 | `with-backend/seed.py` | Fills an empty timeline with made-up people, posts and messages, through the model. |
+| `with-backend/translator.py` | Translates one post with Claude (Anthropic's Messages API), using only `urllib`. |
 | `with-backend/drawings.py` | Draws the made-up posts' pictures, pixel by pixel, and saves them as PNG. |
 | `with-backend/test_server.py` | The checks for all of the above. |
 | `with-backend/page/index.html` | The parts of the screen: the three columns, the post box, the windows (`<dialog>`). |
@@ -33,6 +34,8 @@ This is a copy of the simple Timeline, which is kept as it was in its own reposi
 | `with-backend/page/js/render.js` | Drawing one thing: a post card, an avatar, a thread, links in a post. |
 | `with-backend/page/js/dialogs.js` | The windows: log in, write (post, reply, quote, edit), edit profile. |
 | `with-backend/page/js/pictures.js` | Choosing and uploading a picture. |
+| `with-backend/page/js/strings.js` | Every word the page shows, in English and Japanese, and the server's messages in Japanese. |
+| `with-backend/page/js/settings.js` | The colours (System, Light, Dark) and the language, kept in this browser. |
 | `with-backend/page/js/format.js` | Times, initials, avatar colours, and the addresses of the screens. |
 | `with-backend/page/js/icons.js` | The icons, as simple line drawings. |
 | `with-backend/timeline.db`, `with-backend/uploads/` | The database and the uploaded pictures. Made by the server. Not in git. |
@@ -60,6 +63,8 @@ The three parts of the backend:
 - The made-up posts' pictures, for a timeline filled before they existed: `make pictures`.
 - Start again with an empty timeline: `make reset` (deletes the database and the uploaded pictures).
 - See what is saved: `sqlite3 with-backend/timeline.db '.tables'`
+- Translating posts needs an Anthropic API key: `ANTHROPIC_API_KEY=… make run`. Tests never call
+  the API: they replace `translator.translate` with a stand-in. Keep it that way.
 
 It needs only `python3` (3.9 or newer). Do not add libraries, packages or a build step. The page's
 JavaScript uses modules (`import`), which browsers load by themselves.
@@ -79,4 +84,5 @@ database. The view does not decide anything. If a feature needs a new rule, writ
 check it in the page too, because the page and the server must agree. The server always checks, even
 when the page already did, because a user can change anything that runs on their own device.
 Who is asking comes from the session cookie, never from the request body. Everything a user wrote is
-put on the page with `textContent`, never `innerHTML`.
+put on the page with `textContent`, never `innerHTML`. A word the page shows goes in `strings.js`, in
+English and Japanese; a new server message gets its Japanese pattern there too.

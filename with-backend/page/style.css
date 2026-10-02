@@ -770,6 +770,46 @@ a:hover {
   white-space: nowrap;
 }
 
+/* "Translate post", and a translation under its post: a pale box with a line in the site's
+   lighter blue, so it is clear which words are the person's and which are Claude's. */
+.translate-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--link);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.translate-button .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.translate-button:disabled {
+  color: var(--quiet);
+  cursor: wait;
+}
+
+.translation-box {
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--number);
+  border-radius: 0 8px 8px 0;
+  background: var(--pale-box);
+}
+
+.translation-label {
+  margin: 0 0 2px;
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.translation-box .post-text {
+  margin: 0;
+}
+
 /* #tags, @names and web addresses inside a post. */
 .post-link {
   color: var(--link);

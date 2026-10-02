@@ -45,6 +45,19 @@ messages and bookmarks from the last two hours, so you can see how it feels.
 
 To stop the server, press **Ctrl+C**. The simple version runs on port 8009, so both can run at once.
 
+### Translating posts
+
+The **Translate post** button asks Claude, Anthropic's AI, to translate a post between English and
+Japanese. It needs an Anthropic API key (from <https://console.anthropic.com>), given to the server
+when it starts:
+
+```
+ANTHROPIC_API_KEY=your-key-here make run
+```
+
+Each post is translated only once per language: the server keeps the translation. Without a key,
+everything else works, and the button says that translation is not set up.
+
 ## See it work
 
 - **Post** with the box on Home, or the Post button. 🖼 adds a picture (JPEG, PNG, GIF or WebP, up to 2 MB).
@@ -53,6 +66,9 @@ To stop the server, press **Ctrl+C**. The simple version runs on port 8009, so b
 - **#tags** and **@names** are links. **Explore** searches posts, people and #tags.
 - **Profiles**: click a name. Follow, Message, and on your own, Edit profile (bio and picture).
 - **Notifications** and **Messages** have a red number for what is new.
+- **Colours and language**: the buttons at the top right switch between System, Light and Dark
+  colours, and between English and 日本語 for the whole page. A post in the other language has
+  a **Translate post** button.
 - **Live**: open the app in two browsers, one of them a **private window** (it has its own
   cookies, so it can be someone else). Like, post or send a message in one, and the other changes
   at once.

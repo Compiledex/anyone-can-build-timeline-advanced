@@ -13,6 +13,7 @@ The tables:
   bookmarks each person's saved posts; only they can see them
   notifications  what happened to each person; only they can see theirs
   messages  private messages between two people; only those two can read them
+  translations  each post's words in another language, kept so that each is translated once
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -26,6 +27,8 @@ import re
 import secrets
 import sqlite3
 import time
+
+import translator
 
 # The database file, next to this file. The server creates it when it starts.
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "timeline.db")
@@ -69,6 +72,10 @@ class NotLoggedIn(RuleBroken):
 
 class NotFound(RuleBroken):
     """The request names a post or a person that does not exist."""
+
+
+class Unavailable(RuleBroken):
+    """Something outside the app that the request needs is not working now (the translator)."""
 
 
 def connect(db_path):
@@ -171,6 +178,10 @@ def create_tables(db_path):
                        "receiver_id INTEGER NOT NULL REFERENCES users(id), "
                        "text TEXT NOT NULL, sent_at TEXT NOT NULL, read_at TEXT, "
                        "CHECK (sender_id != receiver_id))")
+    # Translations of posts, kept so that each post is translated (and paid for) once per language.
+    connection.execute("CREATE TABLE IF NOT EXISTS translations ("
+                       "post_id INTEGER NOT NULL REFERENCES posts(id), language TEXT NOT NULL, "
+                       "text TEXT NOT NULL, translated_at TEXT NOT NULL, PRIMARY KEY (post_id, language))")
     # Each person's saved posts. Only they can see them.
     connection.execute("CREATE TABLE IF NOT EXISTS bookmarks ("
                        "user_id INTEGER NOT NULL REFERENCES users(id), "
@@ -659,6 +670,7 @@ def edit_post(db_path, user_id, post_id, text):
         connection.execute("UPDATE posts SET text = ?, edited_at = ? WHERE id = ?",
                            (text, now(), post_id))
         save_tags(connection, post_id, text)
+        connection.execute("DELETE FROM translations WHERE post_id = ?", (post_id,))   # out of date now
         notify_mentions(connection, user_id, post_id, text)   # only new @names hear of it
         connection.commit()
         return find_post(connection, post_id)
@@ -679,6 +691,7 @@ def delete_post(db_path, user_id, post_id):
         connection.execute("DELETE FROM likes WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM post_tags WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM bookmarks WHERE post_id = ?", (post_id,))
+        connection.execute("DELETE FROM translations WHERE post_id = ?", (post_id,))
         connection.execute("DELETE FROM notifications WHERE post_id = ?", (post_id,))
         connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ?, "
                            "picture_id = NULL WHERE id = ?", (now(), post_id))
@@ -702,6 +715,44 @@ def mentions_in(text):
     for name in MENTION.findall(text):
         seen.setdefault(name.lower(), name)
     return list(seen.values())
+
+
+# ---- Translations ----
+
+LANGUAGES = ("en", "ja")
+
+
+def translate_post(db_path, post_id, language):
+    """Check the rules, and return the post's words in language ("en" or "ja"): the kept
+    translation if there is one, or a new one from the translator, which is then kept."""
+    if language not in LANGUAGES:
+        raise RuleBroken("A post can be translated into English (en) or Japanese (ja).")
+    connection = connect(db_path)
+    try:
+        post = find_original(connection, post_id)
+        if post["text"] == "":
+            raise RuleBroken("This post has no words to translate.")
+        kept = connection.execute("SELECT * FROM translations WHERE post_id = ? AND language = ?",
+                                  (post["id"], language)).fetchone()
+    finally:
+        connection.close()
+    if kept is not None:
+        return kept
+    # The translator is asked with no database connection open: it can take a few seconds.
+    try:
+        words = translator.translate(post["text"], language)
+    except translator.TranslationUnavailable as problem:
+        raise Unavailable(str(problem))
+    connection = connect(db_path)
+    try:
+        # INSERT OR REPLACE: if two people asked at the same moment, the second one is kept.
+        connection.execute("INSERT OR REPLACE INTO translations (post_id, language, text, translated_at) "
+                           "VALUES (?, ?, ?, ?)", (post["id"], language, words, now()))
+        connection.commit()
+        return connection.execute("SELECT * FROM translations WHERE post_id = ? AND language = ?",
+                                  (post["id"], language)).fetchone()
+    finally:
+        connection.close()
 
 
 def save_tags(connection, post_id, text):

@@ -20,6 +20,9 @@ export const state = {
   profile: null,          // the profile on screen, as the server sent it
   search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
   sidebar: { trends: [], suggestions: [] },   // what is trending, and who to follow
+  translations: new Map(),       // "12:ja" → post 12's words in Japanese, once asked for
+  translationsOpen: new Set(),   // the translations shown under their posts now
+  translating: new Set(),        // the ones being asked for now
 };
 
 const listeners = [];
@@ -85,6 +88,15 @@ export function updatePost(post) {
   const old = state.posts.get(post.id);
   if (!old) {
     return;
+  }
+  if (old.text !== post.text) {
+    // Edited: a translation of the old words is out of date.
+    for (const key of [...state.translations.keys()]) {
+      if (key.startsWith(post.id + ":")) {
+        state.translations.delete(key);
+        state.translationsOpen.delete(key);
+      }
+    }
   }
   Object.assign(old, post);
 }

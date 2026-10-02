@@ -27,6 +27,7 @@ being careful with files people send.
 - No limit on how often someone can try a password, and no HTTPS. Both would be needed before going
   online; the server listens on `127.0.0.1` only.
 - No video, and one picture per post. No descriptions (alt text) written by the poster.
+- Translation is for posts only, between English and Japanese; bios and messages are not translated.
 - No libraries, no install, no build step. The fonts come from Google Fonts; without internet the
   page uses the computer's own fonts and works the same.
 
@@ -55,6 +56,12 @@ Edit and Delete. A repost shows the post it shares with "Ben reposted" above it.
 reply, quote or edit), logging in, and editing your profile happen in windows (`<dialog>`). Visitors
 can read everything and get a navy bar at the bottom to log in or sign up.
 
+**Colours and language.** Two buttons at the top right of every screen: **System / Light / Dark**
+colours, and **English / 日本語** for every word the page itself shows (dates and times too: "5m" or
+5分). Both are kept in the browser. A post written in the other language than the page's gets a
+**Translate post** button; the translation shows under the original, marked "Translated from
+Japanese by Claude".
+
 **The look**, measured from the site's own stylesheets: deep blue `#0a5181` on white, thin `#dbdbdb`
 lines, pale blue-grey `rgba(128, 150, 183, 0.2)` boxes, numbers in EB Garamond and `#3b84b0`, pill
 buttons, EB Garamond for titles and names, Roboto and Noto Sans JP for text. Dark mode, profile
@@ -82,7 +89,7 @@ page/index.html · style.css · js/*.js ── server.py ── model.py ── 
 | **Controller** | `server.py`: reads each request, asks the model, sends the view's answer, rings the bell |
 | **Model** | `model.py`: every rule; the only code that touches the database and the uploads folder |
 | **View** | `view.py`: one `…_to_json` for each kind of answer |
-| **Data** | `timeline.db` (SQLite, ten tables) and `uploads/`, both made by the server, not in git |
+| **Data** | `timeline.db` (SQLite, eleven tables) and `uploads/`, both made by the server, not in git |
 | **Made-up data** | `seed.py`, which fills an empty timeline through the model, and `drawings.py`, which draws six pictures for it (PNG, written with `zlib` and `struct`) |
 
 **Technologies, and why each one.**
@@ -99,6 +106,16 @@ page/index.html · style.css · js/*.js ── server.py ── model.py ── 
   any saved change the controller rings a bell (a `threading.Condition`), and every connection sends
   `data: changed`; the page then fetches what is new with the ordinary requests.
 - **Pictures as files**, not in the database: the database keeps a row with a random file name.
+- **Claude for translating posts** (`translator.py`): Anthropic's Messages API over `urllib`, with
+  Claude Opus 5.5 at low effort (a short translation is simple work) and the API's default fallback,
+  so a post that Claude's safety check declines is tried on a second model instead of failing. The
+  post goes inside `<post>` tags with the instruction to translate it, never to follow it. The key
+  stays on the server (`ANTHROPIC_API_KEY`); each translation is kept, so it is paid for once.
+- **The page's words in `strings.js`**, in English and Japanese. The server's messages stay in
+  English; the page recognises each one by its pattern and shows it in Japanese.
+- **Settings in the browser** (`localStorage`): colours and language are only about how the page
+  looks, so the server never hears of them. A short script at the top of `index.html` applies the
+  colours before anything is drawn, so the page never flashes the wrong ones.
 
 **The interfaces.** Every change needs a login (`401` without one). A broken rule is `400` with the
 reason; something that does not exist is `404`.
@@ -126,6 +143,7 @@ reason; something that does not exist is `404`.
 | `GET /notifications`, `POST /notifications/read` | nothing | your own notifications; `/read` answers as `GET /me` |
 | `GET /messages`, `GET /messages?with=Ben` | nothing | your conversations; or one, oldest first |
 | `POST /messages`, `POST /messages/read` | `{"to", "text"}`, `{"with"}` | the message; `/read` answers as `GET /me` |
+| `POST /translations` | `{"post_id", "language": "en" or "ja"}` | `{"post_id", "language", "text"}` · `503` when the translator is not set up or not working |
 | `GET /events` | nothing; the connection stays open | `data: hello`, then `data: changed` after each change |
 | `GET /`, `GET /js/…`, `GET /style.css` | nothing | the page; only files inside `page/` are ever sent |
 
@@ -150,7 +168,7 @@ checks, because a user can change anything that runs on their own device.
 
 ## 5. The data model
 
-Ten tables. Each fact is kept once: a name lives only in `users`, and every other table points at it
+Eleven tables. Each fact is kept once: a name lives only in `users`, and every other table points at it
 by number. Counts (likes, reposts, followers, unread) are never stored; they are worked out from the
 rows when someone asks, so they cannot drift.
 
@@ -166,6 +184,7 @@ rows when someone asks, so they cannot drift.
 | `bookmarks` | `user_id`, `post_id`, `saved_at` | primary key: the pair |
 | `notifications` | `id`, `user_id`, `actor_id`, `kind`, `post_id`, `created_at`, `read_at` | `CHECK` on `kind`; unique on (user, actor, kind, post) |
 | `messages` | `id`, `sender_id`, `receiver_id`, `text`, `sent_at`, `read_at` | `CHECK` nobody messages themselves |
+| `translations` | `post_id`, `language`, `text`, `translated_at` | primary key: the pair; deleted when the post is edited or deleted |
 
 Rules that the database keeps as well as the model, so that even code that skips the model cannot
 break them: unique names; one like, follow and bookmark per pair; one live repost per person and post
@@ -228,10 +247,11 @@ with-backend/        make run, then http://localhost:8010
   view.py            the view: the JSON
   seed.py            made-up people, posts and messages
   drawings.py        the made-up posts' pictures, drawn as PNG with the standard library
+  translator.py      translating a post with Claude, over urllib
   test_server.py     unittest: every rule, privacy, pictures, live updates, real round trips
   page/              everything the browser gets, and nothing else
     index.html  style.css
-    js/  main  state  api  screens  render  dialogs  pictures  format  icons
+    js/  main  state  api  screens  render  dialogs  pictures  format  icons  strings  settings
 ```
 
 `timeline.db` and `uploads/` are created next to `server.py` and are git-ignored. `make reset`

@@ -3,6 +3,7 @@
 // so a post is always shown as words and can never run code on the page.
 
 import { icon } from "./icons.js";
+import { currentLanguage } from "./settings.js";
 import { t } from "./strings.js";
 import { avatarColour, exploreLink, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
 import {
@@ -14,6 +15,7 @@ export const handlers = {
   reply: (postId) => {},
   like: (postId) => {},
   repost: (postId, undo) => {},
+  translate: (postId, language) => {},
   bookmark: (postId) => {},
   quote: (postId) => {},
   edit: (postId) => {},
@@ -143,6 +145,10 @@ export function postCard(post, options = {}) {
     const text = element("p", "post-text");
     text.append(postText(post.text));
     main.append(text);
+    const translation = translationRow(post, focusPrefix);
+    if (translation) {
+      main.append(translation);
+    }
   }
   if (post.picture) {
     main.append(postPicture(post));
@@ -160,6 +166,51 @@ export function postCard(post, options = {}) {
   card.append(avatar(post.author), main);
   opensOnClick(card, post, options);
   return card;
+}
+
+// A post's language, roughly: Japanese when it has at least a third as many Japanese characters
+// as Latin letters (one Japanese character says about as much as a short word); null when it has
+// neither (only emoji or numbers). #tags, @names and web addresses are left out of the count.
+export function postLanguage(text) {
+  const plain = text.replace(LINKABLE, " ");
+  const japanese = (plain.match(/[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]/g) || []).length;
+  const latin = (plain.match(/[A-Za-z]/g) || []).length;
+  if (japanese === 0 && latin === 0) {
+    return null;
+  }
+  return japanese * 3 >= latin ? "ja" : "en";
+}
+
+// "Translate post", under a post written in the other language than the page's, and the
+// translation under it once asked for. Claude translates; the server keeps each translation.
+function translationRow(post, focusPrefix) {
+  const from = postLanguage(post.text);
+  const to = currentLanguage();
+  if (from === null || from === to) {
+    return null;
+  }
+  const key = post.id + ":" + to;
+  const working = state.translating.has(key);
+  const open = state.translationsOpen.has(key) && state.translations.has(key);
+  const holder = element("div", "translation");
+  const button = element("button", "text-button translate-button",
+                         t(working ? "translate.working" : open ? "translate.hide" : "translate.button"));
+  button.type = "button";
+  button.disabled = working;
+  button.dataset.focus = focusPrefix + "translate-" + post.id;
+  button.prepend(icon("translate"));
+  button.addEventListener("click", () => handlers.translate(post.id, to));
+  holder.append(button);
+  if (open) {
+    const box = element("div", "translation-box");
+    box.lang = to;
+    box.append(element("p", "translation-label", t("translate.from." + from)));
+    const words = element("p", "post-text");
+    words.append(postText(state.translations.get(key)));   // the translation too is only words
+    box.append(words);
+    holder.append(box);
+  }
+  return holder;
 }
 
 // Clicking a card (not a link or a button in it) opens the post on its own page.

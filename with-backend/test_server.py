@@ -13,6 +13,7 @@ import struct
 import tempfile
 import threading
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.request
 
@@ -20,6 +21,7 @@ import drawings
 import model
 import seed
 import server
+import translator
 import view
 
 PASSWORD = "correct horse"
@@ -831,6 +833,118 @@ class ModelTests(unittest.TestCase):
                                "VALUES (1, 1, 'hi', 'now')")
         connection.close()
 
+class TranslationTests(unittest.TestCase):
+    """The translator is replaced by a stand-in here, so the tests never call Anthropic or cost money."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.folder.name, "test.db")
+        model.create_tables(self.db_path)
+        self.rounds = model.PASSWORD_ROUNDS
+        model.PASSWORD_ROUNDS = 1000
+        self.asked = []
+        def stand_in(text, language):
+            self.asked.append((text, language))
+            return {"ja": "こんにちは、京都！", "en": "Hello, Kyoto!"}[language]
+        self.patch = unittest.mock.patch.object(translator, "translate", stand_in)
+        self.patch.start()
+        token = model.sign_up(self.db_path, "Aiko", PASSWORD)
+        self.aiko = model.user_for_token(self.db_path, token)["id"]
+
+    def tearDown(self):
+        self.patch.stop()
+        model.PASSWORD_ROUNDS = self.rounds
+        self.folder.cleanup()
+
+    def test_a_post_is_translated_once_per_language(self):
+        model.save_post(self.db_path, self.aiko, "Hello, Kyoto!")
+        first = model.translate_post(self.db_path, 1, "ja")
+        again = model.translate_post(self.db_path, 1, "ja")
+        self.assertEqual(view.translation_to_json(first), {"post_id": 1, "language": "ja", "text": "こんにちは、京都！"})
+        self.assertEqual(again["text"], first["text"])
+        self.assertEqual(self.asked, [("Hello, Kyoto!", "ja")])   # the translator was asked only once
+
+    def test_editing_a_post_throws_its_translations_away(self):
+        model.save_post(self.db_path, self.aiko, "Hello, Kyoto!")
+        model.translate_post(self.db_path, 1, "ja")
+        model.edit_post(self.db_path, self.aiko, 1, "Hello again, Kyoto!")
+        model.translate_post(self.db_path, 1, "ja")
+        self.assertEqual([text for text, _ in self.asked], ["Hello, Kyoto!", "Hello again, Kyoto!"])
+
+    def test_translation_rules(self):
+        model.save_post(self.db_path, self.aiko, "Hello")
+        upload = model.save_upload(self.db_path, self.aiko, b"\x89PNG\r\n\x1a\n picture")
+        model.save_post(self.db_path, self.aiko, "", picture_id=upload["id"])
+        for post_id, language in [(1, "fr"), (1, None), (2, "ja"), ("1", "ja")]:
+            with self.assertRaises(model.RuleBroken):
+                model.translate_post(self.db_path, post_id, language)
+        with self.assertRaises(model.NotFound):
+            model.translate_post(self.db_path, 7, "ja")
+        self.assertEqual(self.asked, [])
+
+    def test_a_repost_is_translated_as_its_original(self):
+        token = model.sign_up(self.db_path, "Ben", PASSWORD)
+        ben = model.user_for_token(self.db_path, token)["id"]
+        model.save_post(self.db_path, self.aiko, "Hello, Kyoto!")
+        model.repost(self.db_path, ben, 1)
+        self.assertEqual(model.translate_post(self.db_path, 2, "ja")["post_id"], 1)
+
+    def test_when_the_translator_cannot_translate_the_model_says_so(self):
+        def broken(text, language):
+            raise translator.TranslationUnavailable("The translator is busy. Try again in a moment.")
+        model.save_post(self.db_path, self.aiko, "Hello")
+        with unittest.mock.patch.object(translator, "translate", broken):
+            with self.assertRaises(model.Unavailable):
+                model.translate_post(self.db_path, 1, "ja")
+
+
+class TranslatorTests(unittest.TestCase):
+    """translator.py on its own: the request it would send, and how it reads answers. Nothing is sent."""
+
+    def test_without_a_key_it_says_how_to_set_one_up(self):
+        with unittest.mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            with self.assertRaises(translator.TranslationUnavailable) as caught:
+                translator.translate("Hello", "ja")
+        self.assertIn("ANTHROPIC_API_KEY", str(caught.exception))
+
+    def test_the_request_it_sends(self):
+        sent = {}
+
+        class Answer:
+            def __enter__(self):
+                return self
+            def __exit__(self, *problem):
+                return False
+            def read(self):
+                return json.dumps({"stop_reason": "end_turn",
+                                   "content": [{"type": "thinking", "thinking": ""},
+                                               {"type": "text", "text": "こんにちは"}]}).encode("utf-8")
+
+        def pretend_urlopen(request, timeout):
+            sent["url"], sent["headers"] = request.full_url, dict(request.header_items())
+            sent["body"] = json.loads(request.data)
+            return Answer()
+
+        with unittest.mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            with unittest.mock.patch.object(translator.urllib.request, "urlopen", pretend_urlopen):
+                self.assertEqual(translator.translate("Hello", "ja"), "こんにちは")
+        self.assertEqual(sent["url"], "https://api.anthropic.com/v1/messages")
+        self.assertEqual(sent["headers"]["X-api-key"], "test-key")
+        self.assertEqual(sent["headers"]["Anthropic-version"], "2023-06-01")
+        self.assertEqual(sent["headers"]["Anthropic-beta"], "server-side-fallback-2026-07-01")
+        self.assertEqual((sent["body"]["model"], sent["body"]["fallbacks"]), ("claude-opus-5-5", "default"))
+        self.assertEqual(sent["body"]["output_config"], {"effort": "low"})
+        self.assertIn("Japanese", sent["body"]["system"])
+        self.assertEqual(sent["body"]["messages"], [{"role": "user", "content": "<post>\nHello\n</post>"}])
+
+    def test_a_refusal_or_an_empty_answer_is_no_translation(self):
+        for answer in [{"stop_reason": "refusal", "content": []},
+                       {"stop_reason": "max_tokens", "content": [{"type": "text", "text": "half"}]},
+                       {"stop_reason": "end_turn", "content": []}]:
+            with self.assertRaises(translator.TranslationUnavailable):
+                translator.words_of(answer)
+
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -1255,6 +1369,20 @@ class RealServerTest(unittest.TestCase):
         status, me = self.send(ben, "POST", "/messages/read", {"with": "Aiko"})
         self.assertEqual((status, me["unread_messages"]), (200, 0))
         self.assertEqual([c["name"] for c in self.send(ben, "GET", "/messages")[1]], ["Aiko"])
+
+
+    def test_translations_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.send(aiko, "POST", "/posts", {"text": "Hello"})
+        self.assertEqual(self.send(self.browser(), "POST", "/translations", {"post_id": 1, "language": "ja"})[0], 401)
+        with unittest.mock.patch.object(translator, "translate", lambda text, language: "こんにちは"):
+            self.assertEqual(self.send(aiko, "POST", "/translations", {"post_id": 1, "language": "ja"}),
+                             (200, {"post_id": 1, "language": "ja", "text": "こんにちは"}))
+        self.send(aiko, "PUT", "/posts", {"post_id": 1, "text": "Hello again"})   # the kept one is gone
+        with unittest.mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            status, answer = self.send(aiko, "POST", "/translations", {"post_id": 1, "language": "ja"})
+        self.assertEqual(status, 503)
+        self.assertIn("ANTHROPIC_API_KEY", answer["error"])
 
 
 if __name__ == "__main__":

@@ -92,3 +92,7 @@ def conversations_to_json(rows):
 
 def conversation_to_json(person, rows):
     return {"with": person["name"], "messages": [message_to_json(row) for row in rows]}
+
+
+def translation_to_json(row):
+    return {"post_id": row["post_id"], "language": row["language"], "text": row["text"]}

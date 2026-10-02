@@ -72,6 +72,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
             self.send_json(401, {"error": str(problem)})
         except model.NotFound as problem:
             self.send_json(404, {"error": str(problem)})
+        except model.Unavailable as problem:
+            self.send_json(503, {"error": str(problem)})
         except model.RuleBroken as problem:
             self.send_json(400, {"error": str(problem)})
         else:
@@ -225,6 +227,13 @@ class TimelineHandler(BaseHTTPRequestHandler):
         data = self.read_json()
         row = model.delete_post(self.db, user["id"], data.get("post_id"))
         self.send_json(200, view.post_to_json(row))
+
+    def post_translations(self, query):
+        # Only for someone logged in: each new translation costs money.
+        self.logged_in_user()
+        data = self.read_json()
+        row = model.translate_post(self.db, data.get("post_id"), data.get("language"))
+        self.send_json(200, view.translation_to_json(row))
 
     def post_reposts(self, query):
         user = self.logged_in_user()
@@ -419,6 +428,7 @@ ROUTES = {
     ("POST", "/posts"): TimelineHandler.post_posts,
     ("PUT", "/posts"): TimelineHandler.put_posts,
     ("DELETE", "/posts"): TimelineHandler.delete_posts,
+    ("POST", "/translations"): TimelineHandler.post_translations,
     ("POST", "/reposts"): TimelineHandler.post_reposts,
     ("DELETE", "/reposts"): TimelineHandler.delete_reposts,
     ("GET", "/changes"): TimelineHandler.get_changes,

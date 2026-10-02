@@ -183,6 +183,12 @@ const WORDS = {
     "confirm.delete": "Delete this post? It cannot be undone.",
     "status.cannotReach": "Cannot reach the server. Trying again every second.",
 
+    "translate.button": "Translate post",
+    "translate.hide": "Hide translation",
+    "translate.working": "Translating…",
+    "translate.from.en": "Translated from English by Claude",
+    "translate.from.ja": "Translated from Japanese by Claude",
+
     "time.now": "now",
     "time.minutes": "{count}m",
     "time.hours": "{count}h",
@@ -362,6 +368,12 @@ const WORDS = {
     "confirm.delete": "このポストを削除しますか？元に戻すことはできません。",
     "status.cannotReach": "サーバーに接続できません。1秒ごとに再試行しています。",
 
+    "translate.button": "ポストを翻訳",
+    "translate.hide": "翻訳を隠す",
+    "translate.working": "翻訳中…",
+    "translate.from.en": "英語から翻訳 (Claude)",
+    "translate.from.ja": "日本語から翻訳 (Claude)",
+
     "time.now": "今",
     "time.minutes": "{count}分",
     "time.hours": "{count}時間",
@@ -418,6 +430,14 @@ const SERVER_MESSAGES = [
   [/^The request must be JSON\.$/, "リクエストはJSONで送ってください。"],
   [/^The request must be a JSON object\.$/, "リクエストはJSONオブジェクトで送ってください。"],
   [/^The request must say how long the picture is\.$/, "画像の大きさが分かりません。"],
+  [/^Translation is not set up\. Start the server with an Anthropic API key in ANTHROPIC_API_KEY\.$/,
+   "翻訳が設定されていません。ANTHROPIC_API_KEY にAnthropicのAPIキーを入れてサーバーを起動してください。"],
+  [/^The Anthropic API key was not accepted\.$/, "AnthropicのAPIキーが受け付けられませんでした。"],
+  [/^The translator is busy\. Try again in a moment\.$/, "翻訳サービスが混み合っています。少ししてからもう一度お試しください。"],
+  [/^The translator could not translate this post\.$/, "このポストは翻訳できませんでした。"],
+  [/^Cannot reach the translator\. Is the internet on\?$/, "翻訳サービスに接続できません。インターネットにつながっていますか？"],
+  [/^A post can be translated into English \(en\) or Japanese \(ja\)\.$/, "翻訳先は英語 (en) か日本語 (ja) です。"],
+  [/^This post has no words to translate\.$/, "このポストには翻訳する文字がありません。"],
 ];
 
 // A phrase in the language chosen now, with {name}-style places filled in.

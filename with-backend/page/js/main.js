@@ -310,6 +310,37 @@ handlers.repost = async (postId, undo) => {
 };
 handlers.edit = (postId) => openWrite("edit", postId);
 
+// Translate post: show a translation this window has, or ask the server, which asks Claude once
+// and keeps the answer. A second press hides it again.
+handlers.translate = async (postId, language) => {
+  const key = postId + ":" + language;
+  if (state.translationsOpen.has(key)) {
+    state.translationsOpen.delete(key);
+    changed();
+    return;
+  }
+  if (state.translations.has(key)) {
+    state.translationsOpen.add(key);
+    changed();
+    return;
+  }
+  if (state.me === null) {
+    openLogin("login");
+    return;
+  }
+  state.translating.add(key);
+  changed();
+  const { answer, error } = await send("POST", "/translations", { post_id: postId, language: language });
+  state.translating.delete(key);
+  if (error) {
+    showStatus(error);
+  } else {
+    state.translations.set(key, answer.text);
+    state.translationsOpen.add(key);
+  }
+  changed();
+};
+
 handlers.like = async (postId) => {
   if (state.me === null) {
     openLogin("login");
