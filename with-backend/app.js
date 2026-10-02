@@ -568,7 +568,7 @@ async function sendPost(event) {
       return;
     }
   }
-  // Saved. Ask for new posts now, instead of waiting for the next second.
+  // Saved. Ask for new posts now, instead of waiting for the server's "changed" message.
   cancelMode();
   await checkForNewPosts();
 }
