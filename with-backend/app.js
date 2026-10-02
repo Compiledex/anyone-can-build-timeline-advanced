@@ -1,23 +1,34 @@
-// Timeline, the version WITH a backend.
+// Timeline, the advanced version.
 //
-// This page keeps nothing itself. It sends each new post, reply, edit, delete and like
-// to the server (server.py), and every second it asks the server three things:
+// This page keeps nothing itself. It sends each sign-up, log-in, post, reply, edit, delete
+// and like to the server (server.py), and every second it asks the server three things:
 // "any new posts?", "how many likes?" and "which posts were edited or deleted?"
-// Because every window asks the same server, every window sees the same timeline.
+//
+// The server knows who you are from a cookie it set when you logged in. The page never sees
+// that cookie: it is HttpOnly, so JavaScript cannot read it, and the browser sends it by itself.
 
 const MAX_TEXT = 280;
 const CANNOT_REACH = "Cannot reach the server. Trying again every second.";
 
-const authorBox = document.getElementById("author");
+const accountBar = document.getElementById("account-bar");
+const meName = document.getElementById("me-name");
+const logOutButton = document.getElementById("log-out");
+const loginForm = document.getElementById("login-form");
+const loginName = document.getElementById("login-name");
+const loginPassword = document.getElementById("login-password");
+const signUpButton = document.getElementById("sign-up");
+const postForm = document.getElementById("post-form");
 const textBox = document.getElementById("text");
 const countLine = document.getElementById("count");
 const statusLine = document.getElementById("status");
 const timeline = document.getElementById("timeline");
-const postForm = document.getElementById("post-form");
 const modeLine = document.getElementById("mode-line");
 const modeText = document.getElementById("mode-text");
 const cancelButton = document.getElementById("cancel-mode");
 const submitButton = document.getElementById("submit-button");
+
+// The logged-in person's name, or null when nobody is logged in.
+let me = null;
 
 // The id of the newest post this window has shown. 0 means "none yet".
 let lastId = 0;
@@ -27,6 +38,27 @@ const shownPosts = new Map();
 
 // What the box is for right now: a new post, a reply to a post, or an edit of a post.
 let mode = { kind: "post", postId: null };
+
+// ---- Showing things ----
+
+// "2026-10-02 15:42" becomes "15:42" today, "Yesterday 15:42", or "30 Sep 15:42".
+function shortTime(stamp) {
+  if (!stamp) {
+    return "";
+  }
+  const [day, clock] = stamp.split(" ");
+  const date = new Date(day + "T00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysAgo = Math.round((today - date) / (24 * 60 * 60 * 1000));
+  if (daysAgo === 0) {
+    return clock;
+  }
+  if (daysAgo === 1) {
+    return "Yesterday " + clock;
+  }
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + " " + clock;
+}
 
 // Put one post on the screen: a new post at the top, a reply under its post.
 function showPost(post) {
@@ -45,7 +77,8 @@ function showPost(post) {
 
   const time = document.createElement("span");
   time.className = "post-time";
-  time.textContent = post.posted_at;
+  time.textContent = shortTime(post.posted_at);
+  time.title = post.posted_at;
 
   const edited = document.createElement("span");
   edited.className = "post-edited";
@@ -78,7 +111,7 @@ function showPost(post) {
     timeline.prepend(item);        // posts go on top, so the newest is always first
   }
 
-  shownPosts.set(post.id, { author: post.author, item, text, edited, buttons, like, edit, remove, replies });
+  shownPosts.set(post.id, { author: post.author, item, text, edited, buttons, like, reply, edit, remove, replies });
   showLikeCount(like, 0, false);
   showText(post);
   showOwnButtons(post.id);
@@ -110,14 +143,15 @@ function showText(post) {
     return;
   }
   shown.text.textContent = post.text;
-  shown.edited.textContent = post.edited_at ? "edited " + post.edited_at : "";
+  shown.edited.textContent = post.edited_at ? "edited " + shortTime(post.edited_at) : "";
 }
 
-// The Edit and Delete buttons show only on posts by the name in the box.
-// The server checks this again: a name can edit and delete only its own posts.
+// Reply shows only when someone is logged in. Edit and Delete show only on your own posts.
+// The server checks this again: it knows who you are from your login.
 function showOwnButtons(postId) {
   const shown = shownPosts.get(postId);
-  const own = shown.author === authorBox.value.trim();
+  const own = me !== null && shown.author === me;
+  shown.reply.hidden = me === null;
   shown.edit.hidden = !own;
   shown.remove.hidden = !own;
 }
@@ -142,6 +176,21 @@ function showLikes(counts) {
   }
 }
 
+// Show who is logged in: the bar at the top and the post box, or the log-in box.
+function showMe(name) {
+  me = name;
+  accountBar.hidden = me === null;
+  meName.textContent = me || "";
+  loginForm.hidden = me !== null;
+  postForm.hidden = me === null;
+  for (const postId of shownPosts.keys()) {
+    showOwnButtons(postId);
+  }
+  if (me === null && mode.kind !== "post") {
+    cancelMode();
+  }
+}
+
 function showStatus(words) {
   statusLine.textContent = words;
 }
@@ -152,6 +201,8 @@ function updateCount() {
   countLine.textContent = length + " / " + MAX_TEXT;
   countLine.classList.toggle("too-long", length > MAX_TEXT);
 }
+
+// ---- The post box: a new post, a reply, or an edit ----
 
 // Change what the box is for: "post", "reply" or "edit".
 function setMode(kind, postId) {
@@ -191,6 +242,8 @@ function cancelMode() {
   showStatus("");
 }
 
+// ---- Talking to the server ----
+
 // Send something to the server. Returns the server's answer,
 // or null after showing why it did not work.
 async function send(method, path, data) {
@@ -198,9 +251,12 @@ async function send(method, path, data) {
     const response = await fetch(path, {
       method: method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(data || {}),
     });
     const answer = await response.json();
+    if (response.status === 401) {
+      showMe(null);   // the login ended, for example after 30 days
+    }
     if (!response.ok) {
       // The server refused. It says which rule was broken.
       showStatus(answer.error);
@@ -211,6 +267,16 @@ async function send(method, path, data) {
   } catch (error) {
     showStatus(CANNOT_REACH);
     return null;
+  }
+}
+
+// Ask the server who is logged in in this browser.
+async function checkMe() {
+  try {
+    const response = await fetch("/me");
+    showMe((await response.json()).name);
+  } catch (error) {
+    showStatus(CANNOT_REACH);
   }
 }
 
@@ -231,10 +297,10 @@ async function checkForNewPosts() {
   }
 }
 
-// Ask the server how many likes each post has, and which ones the name in the box liked.
+// Ask the server how many likes each post has, and which ones you liked.
 async function checkLikes() {
   try {
-    const response = await fetch("/likes?name=" + encodeURIComponent(authorBox.value.trim()));
+    const response = await fetch("/likes");
     showLikes(await response.json());
   } catch (error) {
     showStatus(CANNOT_REACH);
@@ -262,10 +328,41 @@ async function keepChecking() {
   setTimeout(keepChecking, 1000);
 }
 
+// ---- What the buttons do ----
+
+// Log in, or sign up: both send the name and password, and both log this browser in.
+async function logInOrSignUp(path) {
+  const name = loginName.value;
+  const password = loginPassword.value;
+
+  // A quick check on the page. The server checks the same rules again.
+  if (name.trim() === "") {
+    showStatus("The name must not be empty.");
+    return;
+  }
+  if (path === "/signup" && password.length < 8) {
+    showStatus("The password must be at least 8 characters.");
+    return;
+  }
+
+  const answer = await send("POST", path, { name: name, password: password });
+  if (!answer) {
+    return;
+  }
+  loginPassword.value = "";
+  showMe(answer.name);
+  await checkLikes();
+}
+
+async function logOut() {
+  await send("POST", "/logout");
+  showMe(null);
+  await checkLikes();
+}
+
 // The Post button: send a new post, a reply, or an edit, depending on the mode.
 async function sendPost(event) {
   event.preventDefault();
-  const author = authorBox.value;
   const text = textBox.value;
 
   // A quick check on the page, so the person does not wait for an answer.
@@ -277,38 +374,32 @@ async function sendPost(event) {
   }
 
   if (mode.kind === "edit") {
-    const post = await send("PUT", "/posts", { post_id: mode.postId, name: author, text: text });
+    const post = await send("PUT", "/posts", { post_id: mode.postId, text: text });
     if (!post) {
       return;
     }
     showText(post);
   } else {
     // reply_to is null for a new post, or the id of the post being answered.
-    const post = await send("POST", "/posts", { author: author, text: text, reply_to: mode.postId });
+    const post = await send("POST", "/posts", { text: text, reply_to: mode.postId });
     if (!post) {
       return;
     }
   }
   // Saved. Ask for new posts now, instead of waiting for the next second.
-  // This also brings in any post from another window that came just before ours.
   cancelMode();
   await checkForNewPosts();
 }
 
-// The Like button: like the post, or take the like back if this name already liked it.
+// The Like button: like the post, or take the like back if you already liked it.
 async function toggleLike(postId, button) {
-  const name = authorBox.value;
-
-  // A quick check on the page. The server checks the same rules again,
-  // and only the server can know for sure whether this name already liked this post.
-  if (name.trim() === "") {
-    showStatus("The name must not be empty.");
+  if (me === null) {
+    showStatus("Log in to like posts.");
     return;
   }
-
   button.disabled = true;   // so a double-click sends only one request
   const method = button.classList.contains("liked") ? "DELETE" : "POST";
-  const counts = await send(method, "/likes", { post_id: postId, name: name });
+  const counts = await send(method, "/likes", { post_id: postId });
   if (counts) {
     showLikes(counts);
   }
@@ -320,25 +411,19 @@ async function deletePost(postId) {
   if (!confirm("Delete this post? It cannot be undone.")) {
     return;
   }
-  const post = await send("DELETE", "/posts", { post_id: postId, name: authorBox.value });
+  const post = await send("DELETE", "/posts", { post_id: postId });
   if (post) {
     showText(post);
   }
 }
 
-// A new name in the box: show the Edit and Delete buttons and likes that belong to that name.
-function nameChanged() {
-  for (const postId of shownPosts.keys()) {
-    showOwnButtons(postId);
-  }
-  if (mode.kind === "edit") {
-    cancelMode();   // the post being edited may not belong to the new name
-  }
-  checkLikes();
-}
-
+loginForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  logInOrSignUp("/login");
+});
+signUpButton.addEventListener("click", () => logInOrSignUp("/signup"));
+logOutButton.addEventListener("click", logOut);
 textBox.addEventListener("input", updateCount);
-authorBox.addEventListener("input", nameChanged);
 cancelButton.addEventListener("click", cancelMode);
 postForm.addEventListener("submit", sendPost);
-keepChecking();
+checkMe().then(keepChecking);

@@ -300,3 +300,62 @@ button:hover {
   color: var(--quiet);
   font-style: italic;
 }
+
+/* ---- Accounts ---- */
+
+/* "Logged in as Aiko · Log out", at the right of the top bar. */
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--quiet);
+  font-size: 15px;
+}
+
+.account-bar strong {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 19px;
+}
+
+/* The log-in box: a serif heading, like the site's section titles. */
+.card-title {
+  margin: 0 0 4px;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.card-hint {
+  margin: 0 0 16px;
+  color: var(--quiet);
+}
+
+.label-hint {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.card input {
+  margin-bottom: 14px;
+}
+
+.login-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* A second choice next to a main button: the same pill, as an outline. */
+.secondary-button {
+  border-color: var(--button);
+  background: transparent;
+  color: var(--brand);
+}
+
+.secondary-button:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
