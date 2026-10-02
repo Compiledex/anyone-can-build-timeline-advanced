@@ -22,6 +22,7 @@ This is a copy of the simple Timeline, which is kept as it was in its own reposi
 | `with-backend/model.py` | The **model**: every rule, and the only code that reads or writes the database and the uploads folder. |
 | `with-backend/view.py` | The **view**: turns database rows into the JSON the page reads. |
 | `with-backend/seed.py` | Fills an empty timeline with made-up people, posts and messages, through the model. |
+| `with-backend/drawings.py` | Draws the made-up posts' pictures, pixel by pixel, and saves them as PNG. |
 | `with-backend/test_server.py` | The checks for all of the above. |
 | `with-backend/page/index.html` | The parts of the screen: the three columns, the post box, the windows (`<dialog>`). |
 | `with-backend/page/style.css` | How it looks, in light and dark, after the Kansai Gaidai site. |
@@ -56,6 +57,7 @@ The three parts of the backend:
 - A timeline with made-up people: `make reset seed`. They all have the password `timeline123`.
 - Made-up activity for a real account (followers, likes, replies, mentions, messages, bookmarks):
   `make welcome NAME=Alex`.
+- The made-up posts' pictures, for a timeline filled before they existed: `make pictures`.
 - Start again with an empty timeline: `make reset` (deletes the database and the uploaded pictures).
 - See what is saved: `sqlite3 with-backend/timeline.db '.tables'`
 

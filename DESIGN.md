@@ -83,7 +83,7 @@ page/index.html · style.css · js/*.js ── server.py ── model.py ── 
 | **Model** | `model.py`: every rule; the only code that touches the database and the uploads folder |
 | **View** | `view.py`: one `…_to_json` for each kind of answer |
 | **Data** | `timeline.db` (SQLite, ten tables) and `uploads/`, both made by the server, not in git |
-| **Made-up data** | `seed.py`, which fills an empty timeline through the model |
+| **Made-up data** | `seed.py`, which fills an empty timeline through the model, and `drawings.py`, which draws six pictures for it (PNG, written with `zlib` and `struct`) |
 
 **Technologies, and why each one.**
 
@@ -227,6 +227,7 @@ with-backend/        make run, then http://localhost:8010
   model.py           the model: the rules and the database
   view.py            the view: the JSON
   seed.py            made-up people, posts and messages
+  drawings.py        the made-up posts' pictures, drawn as PNG with the standard library
   test_server.py     unittest: every rule, privacy, pictures, live updates, real round trips
   page/              everything the browser gets, and nothing else
     index.html  style.css

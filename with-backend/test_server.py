@@ -9,12 +9,14 @@ import http.cookiejar
 import json
 import os
 import sqlite3
+import struct
 import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
 
+import drawings
 import model
 import seed
 import server
@@ -497,6 +499,21 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(model.NotFound):
             model.upload_file(self.db_path, upload["file_name"])
 
+    def test_add_a_picture_to_your_own_post_that_has_none(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "look")
+        mine = model.save_upload(self.db_path, aiko, self.PNG)
+        theirs = model.save_upload(self.db_path, ben, self.PNG)
+        with self.assertRaises(model.RuleBroken):
+            model.add_picture(self.db_path, ben, 1, theirs["id"])          # not Ben's post
+        with self.assertRaises(model.RuleBroken):
+            model.add_picture(self.db_path, aiko, 1, theirs["id"])         # not Aiko's picture
+        row = model.add_picture(self.db_path, aiko, 1, mine["id"])
+        self.assertEqual(row["picture_id"], mine["id"])
+        another = model.save_upload(self.db_path, aiko, self.PNG)
+        with self.assertRaises(model.RuleBroken):
+            model.add_picture(self.db_path, aiko, 1, another["id"])        # it has one already
+
     def test_a_profile_picture(self):
         aiko = self.user("Aiko")
         first = model.save_upload(self.db_path, aiko, self.PNG)
@@ -892,6 +909,31 @@ class SeedTests(unittest.TestCase):
         for wrong in ["Nobody", "Aiko"]:
             with self.assertRaises(SystemExit):
                 seed.welcome(self.db_path, wrong)
+
+    def test_the_drawings_are_real_pictures_the_model_accepts(self):
+        for key, draw in drawings.FOR_POSTS.items():
+            data = draw()
+            self.assertEqual(model.picture_type(data), ("image/png", ".png"), key)
+            self.assertLess(len(data), model.MAX_UPLOAD, key)
+            width, height = struct.unpack(">II", data[16:24])   # from the PNG header
+            self.assertEqual((width, height), (drawings.WIDTH, drawings.HEIGHT), key)
+
+    def test_the_made_up_posts_get_their_pictures(self):
+        seed.seed(self.db_path)
+        rows = view.posts_to_json(model.posts_after(self.db_path, 0))
+        with_pictures = [row["author"] for row in rows if row["picture"]]
+        self.assertEqual(len(with_pictures), len(drawings.FOR_POSTS))
+        self.assertIn("Emma", with_pictures)                     # Emma's Fushimi Inari post
+        self.assertEqual(seed.pictures(self.db_path), 0)         # twice does no harm
+
+    def test_pictures_can_be_added_to_a_timeline_filled_before(self):
+        real_add = seed.add_pictures
+        seed.add_pictures = lambda db_path: 0                    # fill as before pictures existed
+        try:
+            seed.seed(self.db_path)
+        finally:
+            seed.add_pictures = real_add
+        self.assertEqual(seed.pictures(self.db_path), len(drawings.FOR_POSTS))
 
     def test_the_seed_puts_the_real_clock_back(self):
         real_now = model.now

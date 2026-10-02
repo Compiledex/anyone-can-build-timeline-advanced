@@ -626,6 +626,26 @@ def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=
         connection.close()
 
 
+def add_picture(db_path, user_id, post_id, picture_id):
+    """Check the rules, and add a picture to a post that has none. seed.py uses this to give its
+    made-up posts pictures; on the page, a picture is added when the post is written."""
+    connection = connect(db_path)
+    try:
+        post = find_post(connection, post_id)
+        if post["author_id"] != user_id:
+            raise RuleBroken("You can only add a picture to your own post.")
+        if post["repost_of"] is not None:
+            raise RuleBroken("A repost cannot have a picture.")
+        if post["picture_id"] is not None:
+            raise RuleBroken("This post already has a picture.")
+        find_unused_upload(connection, picture_id, user_id)
+        connection.execute("UPDATE posts SET picture_id = ? WHERE id = ?", (picture_id, post_id))
+        connection.commit()
+        return find_post(connection, post_id)
+    finally:
+        connection.close()
+
+
 def edit_post(db_path, user_id, post_id, text):
     """Check the rules, change the post's text, and return the changed row."""
     connection = connect(db_path)

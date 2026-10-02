@@ -3,6 +3,9 @@ and messages, so the app looks alive. Notifications come by themselves: the mode
 
 Run it on an empty timeline:  make reset seed   (or: python3 seed.py)
 
+Six of the made-up posts get pictures: simple drawings made by drawings.py. To add them to a
+timeline that was filled before they existed:  make pictures
+
 Then give your own account something to see:  make welcome NAME=Alex
 (or: python3 seed.py --welcome Alex). The made-up people follow you, mention you, react to a post
 of yours, and send you messages, and you get some bookmarks, all in the last two hours.
@@ -16,6 +19,7 @@ import argparse
 import random
 import time
 
+import drawings
 import model
 
 PASSWORD = "timeline123"
@@ -219,6 +223,8 @@ def fill(db_path):
         at(next(m for k, _, m, _, _ in POSTS if k == key) - 30)
         model.delete_post(db_path, user_ids[author], post_ids[key])
 
+    add_pictures(db_path)
+
     for name, keys in BOOKMARKS.items():
         for key in keys:
             at(next(m for k, _, m, _, _ in POSTS if k == key) - 5)
@@ -240,6 +246,36 @@ def fill(db_path):
     likes = sum(row["likes"] for row in model.like_counts(db_path))
     return {"people": len(PEOPLE), "posts": len(POSTS), "likes": likes, "follows": follows,
             "messages": len(MESSAGES)}
+
+
+# ---- Pictures for the made-up posts: make pictures ----
+
+def add_pictures(db_path):
+    """Draw a picture for each made-up post in drawings.FOR_POSTS that has none yet, and add it,
+    through the model, as its author would. Running it twice does no harm. Returns how many."""
+    added = 0
+    for key, draw in drawings.FOR_POSTS.items():
+        connection = model.connect(db_path)
+        post_id = made_up_post(connection, key)
+        post = connection.execute("SELECT author_id, posted_at, picture_id FROM posts WHERE id = ?",
+                                  (post_id,)).fetchone() if post_id else None
+        connection.close()
+        if post is None or post["picture_id"] is not None:
+            continue   # the post is not here, or it has its picture already
+        at(minutes_since(post["posted_at"]))
+        upload = model.save_upload(db_path, post["author_id"], draw())
+        model.add_picture(db_path, post["author_id"], post_id, upload["id"])
+        added += 1
+    return added
+
+
+def pictures(db_path):
+    real_now = model.now
+    try:
+        model.create_tables(db_path)
+        return add_pictures(db_path)
+    finally:
+        model.now = real_now   # the real clock again, whatever happened
 
 
 # ---- Activity for a real account: make welcome NAME=Alex ----
@@ -380,8 +416,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fill the timeline with made-up data.")
     parser.add_argument("--welcome", metavar="NAME",
                         help="give this existing account made-up notifications, messages and bookmarks")
-    name = parser.parse_args().welcome
-    if name:
+    parser.add_argument("--pictures", action="store_true",
+                        help="add the drawings to the made-up posts of a timeline filled before")
+    arguments = parser.parse_args()
+    name = arguments.welcome
+    if arguments.pictures:
+        added = pictures(model.DB_PATH)
+        print(f"Added {added} pictures to the made-up posts." if added
+              else "Nothing to add: the made-up posts have their pictures, or are not here (make seed).")
+    elif name:
         done = welcome(model.DB_PATH, name)
         print(f"{name} got {done['follows']} new followers, {done['likes']} likes, {done['replies']} reply, "
               f"{done['mentions']} mentions, {done['reposts']} repost, {done['quotes']} quote, "
