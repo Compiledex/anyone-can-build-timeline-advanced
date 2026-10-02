@@ -5,12 +5,13 @@
 // (/events); each time anyone changes anything, the server says so, and the page asks for what is
 // new and draws the screen again.
 
-import { CANNOT_REACH, get, onLoggedOut, send, showStatus, toast } from "./api.js";
+import { get, isOffline, onLoggedOut, send, showOffline, showStatus, toast } from "./api.js";
 import { onProfileSaved, onSent, openEditProfile, openLogin, openWrite, updateCount } from "./dialogs.js";
 import { exploreLink, postLink, profileLink, readAddress } from "./format.js";
 import { fillIcons, icon } from "./icons.js";
 import { picturePicker } from "./pictures.js";
-import { currentTheme, nextTheme, setTheme } from "./settings.js";
+import { currentLanguage, currentTheme, nextTheme, setLanguage, setTheme } from "./settings.js";
+import { fillWords, t } from "./strings.js";
 import { avatar, element, handlers, link } from "./render.js";
 import {
   bookmarksScreen, exploreScreen, homeScreen, messagesScreen, notificationsScreen, postScreen, profileHandlers,
@@ -65,7 +66,7 @@ function draw() {
 
   // As on the real thing: "(3) Timeline" when there are 3 notifications you have not seen.
   const unread = state.unreadNotifications > 0 ? "(" + state.unreadNotifications + ") " : "";
-  document.title = unread + (shown.title === "Home" ? "Timeline" : shown.title + " · Timeline");
+  document.title = unread + (address.screen === "home" ? t("app.name") : shown.title + " · " + t("app.name"));
   pageTitle.textContent = shown.title;
   breadcrumb.replaceChildren();
   shown.breadcrumb.forEach((part, index) => {
@@ -126,12 +127,12 @@ function drawMenu(address) {
   badge.hidden = state.unreadNotifications === 0;
   badge.textContent = state.unreadNotifications > 99 ? "99+" : String(state.unreadNotifications);
   badge.parentElement.parentElement.setAttribute("aria-label", state.unreadNotifications > 0
-    ? "Notifications, " + state.unreadNotifications + " new" : "Notifications");
+    ? t("nav.notificationsNew", { count: state.unreadNotifications }) : t("nav.notifications"));
   const messagesBadge = document.getElementById("nav-messages-badge");
   messagesBadge.hidden = state.unreadMessages === 0;
   messagesBadge.textContent = state.unreadMessages > 99 ? "99+" : String(state.unreadMessages);
   messagesBadge.parentElement.parentElement.setAttribute("aria-label", state.unreadMessages > 0
-    ? "Messages, " + state.unreadMessages + " unread" : "Messages");
+    ? t("nav.messagesNew", { count: state.unreadMessages }) : t("nav.messages"));
   document.getElementById("nav-profile").hidden = !loggedIn;
   document.getElementById("nav-post").hidden = !loggedIn;
   document.getElementById("nav-me").hidden = !loggedIn;
@@ -272,11 +273,11 @@ async function catchUp() {
       await checkSearch();
       await checkNotifications();
       await checkMessages();
-      if (document.getElementById("status").textContent === CANNOT_REACH) {
+      if (isOffline()) {
         showStatus("");
       }
     } catch (error) {
-      showStatus(CANNOT_REACH);
+      showOffline();
     }
     changed();
   } while (catchUpAgain);
@@ -286,7 +287,7 @@ async function catchUp() {
 function listen() {
   const events = new EventSource("/events");
   events.addEventListener("message", catchUp);
-  events.addEventListener("error", () => showStatus(CANNOT_REACH));
+  events.addEventListener("error", showOffline);
 }
 
 // ---- What the buttons do ----
@@ -304,7 +305,7 @@ handlers.repost = async (postId, undo) => {
     showStatus(error);
     return;
   }
-  toast(undo ? "Your repost was taken back" : "Reposted");
+  toast(t(undo ? "toast.repostUndone" : "toast.reposted"));
   await catchUp();
 };
 handlers.edit = (postId) => openWrite("edit", postId);
@@ -337,11 +338,11 @@ handlers.bookmark = async (postId) => {
   }
   state.bookmarks = answer.post_ids;
   changed();
-  toast(saved ? "Removed from your Bookmarks" : "Added to your Bookmarks");
+  toast(t(saved ? "toast.bookmarkRemoved" : "toast.bookmarkAdded"));
 };
 
 handlers.remove = async (postId) => {
-  if (!confirm("Delete this post? It cannot be undone.")) {
+  if (!confirm(t("confirm.delete"))) {
     return;
   }
   const { answer, error } = await send("DELETE", "/posts", { post_id: postId });
@@ -351,7 +352,7 @@ handlers.remove = async (postId) => {
   }
   updatePost(answer);
   changed();
-  toast("Your post was deleted");
+  toast(t("toast.deleted"));
 };
 
 profileHandlers.follow = async () => {
@@ -377,14 +378,14 @@ sidebarHandlers.follow = async (name) => {
   setMe(answer);
   await checkSidebar().catch(() => {});
   changed();
-  toast("You follow " + name + " now");
+  toast(t("toast.followNow", { name: name }));
 };
 
 onProfileSaved(async () => {
   await checkPeople().catch(() => {});
   await checkProfile();
   changed();
-  toast("Your profile was saved");
+  toast(t("toast.profileSaved"));
 });
 
 // After a post, a reply or an edit was sent: catch up, and say so.
@@ -394,8 +395,7 @@ onSent((kind, post) => {
     changed();
   }
   catchUp();
-  toast({ post: "Your post was sent", reply: "Your reply was sent", quote: "Your post was sent",
-          edit: "Your post was saved" }[kind]);
+  toast(t("toast.sent." + kind));
   if (kind === "reply" && readAddress().screen !== "post") {
     location.hash = postLink(post.reply_to);
   }
@@ -429,7 +429,7 @@ document.getElementById("log-out").addEventListener("click", async () => {
   state.chat = null;
   await checkLikes().catch(() => {});
   changed();
-  toast("You are logged out");
+  toast(t("toast.loggedOut"));
 });
 
 for (const button of document.querySelectorAll("[data-open-login]")) {
@@ -510,13 +510,14 @@ window.addEventListener("hashchange", addressChanged);
 
 // The colours switch at the top: System → Light → Dark. It shows the one in use now.
 const themeButton = document.getElementById("theme-button");
-const THEME_LOOK = { system: ["system", "System"], light: ["sun", "Light"], dark: ["moon", "Dark"] };
+const THEME_ICON = { system: "system", light: "sun", dark: "moon" };
 
 function drawThemeButton() {
-  const [iconName, words] = THEME_LOOK[currentTheme()];
-  themeButton.replaceChildren(icon(iconName), document.createTextNode(words));
-  themeButton.setAttribute("aria-label", "Colours: " + words + ". Press to change.");
-  themeButton.title = "Colours: " + words;
+  const theme = currentTheme();
+  const words = t("theme." + theme);
+  themeButton.replaceChildren(icon(THEME_ICON[theme]), document.createTextNode(words));
+  themeButton.setAttribute("aria-label", t("theme.label", { mode: words }));
+  themeButton.title = t("theme.title", { mode: words });
 }
 
 themeButton.addEventListener("click", () => {
@@ -524,10 +525,33 @@ themeButton.addEventListener("click", () => {
   drawThemeButton();
 });
 
+// The language switch: it shows the other language, in that language ("日本語" or "English").
+const languageButton = document.getElementById("language-button");
+
+function drawLanguageButton() {
+  languageButton.replaceChildren(icon("globe"), document.createTextNode(t("language.other")));
+  languageButton.lang = currentLanguage() === "ja" ? "en" : "ja";   // so a screen reader says it right
+  languageButton.setAttribute("aria-label", t("language.label"));
+  languageButton.title = t("language.label");
+}
+
+languageButton.addEventListener("click", () => {
+  setLanguage(currentLanguage() === "ja" ? "en" : "ja");
+  fillWords();            // the fixed words in index.html
+  drawLanguageButton();
+  drawThemeButton();
+  if (isOffline()) {
+    showOffline();        // the same message, in the new language
+  }
+  changed();              // everything else is drawn again, in the new language
+});
+
 // Times like "5m" grow older: draw again every minute.
 setInterval(changed, 60 * 1000);
 
 fillIcons();
+fillWords();
+drawLanguageButton();
 drawThemeButton();
 updateComposeCount();
 addressChanged();

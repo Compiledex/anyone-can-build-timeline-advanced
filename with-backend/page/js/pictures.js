@@ -4,6 +4,7 @@
 
 import { uploadPicture } from "./api.js";
 import { icon } from "./icons.js";
+import { fromServer, t } from "./strings.js";
 
 // The same rules as the server, checked here first so that nobody waits for a refusal.
 export const PICTURE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -12,10 +13,10 @@ export const MAX_PICTURE = 2 * 1024 * 1024;
 // Check a chosen file, and send it. Returns { answer: { id, url } } or { error }.
 export async function checkAndUpload(file) {
   if (!PICTURE_TYPES.includes(file.type)) {
-    return { error: "Only JPEG, PNG, GIF and WebP pictures are allowed." };
+    return { error: fromServer("Only JPEG, PNG, GIF and WebP pictures are allowed.") };
   }
   if (file.size > MAX_PICTURE) {
-    return { error: "A picture must be 2 MB or smaller." };
+    return { error: fromServer("A picture must be 2 MB or smaller.") };
   }
   return uploadPicture(file);
 }
@@ -36,8 +37,10 @@ export function picturePicker(tools, preview, onChange, onError) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "icon-button tool";
-  button.setAttribute("aria-label", "Add a picture");
-  button.title = "Add a picture";
+  button.dataset.i18nLabel = "picture.add";   // fillWords gives it the words of the page's language
+  button.dataset.i18nTitle = "picture.add";
+  button.setAttribute("aria-label", t("picture.add"));
+  button.title = t("picture.add");
   button.append(icon("image"));
   tools.append(button, input);
 
@@ -50,11 +53,11 @@ export function picturePicker(tools, preview, onChange, onError) {
     }
     const image = document.createElement("img");
     image.src = picture.url;
-    image.alt = "The picture you added";
+    image.alt = t("picture.alt");
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "picture-remove";
-    remove.setAttribute("aria-label", "Take the picture out");
+    remove.setAttribute("aria-label", t("picture.remove"));
     remove.append(icon("close"));
     remove.addEventListener("click", () => {
       picture = null;
@@ -72,7 +75,7 @@ export function picturePicker(tools, preview, onChange, onError) {
       return;
     }
     button.disabled = true;
-    preview.textContent = "Adding the picture…";
+    preview.textContent = t("picture.adding");
     const { answer, error } = await checkAndUpload(file);
     button.disabled = false;
     if (error) {

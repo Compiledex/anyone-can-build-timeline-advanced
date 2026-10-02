@@ -6,6 +6,7 @@ import { send } from "./api.js";
 import { checkAndUpload, hiddenFileInput, picturePicker } from "./pictures.js";
 import { avatar, postCard } from "./render.js";
 import { changed, setMe, state } from "./state.js";
+import { fromServer, t } from "./strings.js";
 
 export const MAX_TEXT = 280;
 export const MAX_BIO = 160;
@@ -26,13 +27,13 @@ let loginMode = "login";
 export function openLogin(mode) {
   loginMode = mode;
   const signingUp = mode === "signup";
-  loginTitle.textContent = signingUp ? "Join Timeline" : "Log in to Timeline";
-  loginSubmit.textContent = signingUp ? "Sign up" : "Log in";
+  loginTitle.textContent = t(signingUp ? "login.titleSignUp" : "login.titleLogIn");
+  loginSubmit.textContent = t(signingUp ? "login.signUp" : "login.logIn");
   loginPassword.autocomplete = signingUp ? "new-password" : "current-password";
   loginError.textContent = "";
   loginSwitch.replaceChildren(
-    document.createTextNode(signingUp ? "Already have an account? " : "Don't have an account? "),
-    switchButton(signingUp ? "Log in" : "Sign up", signingUp ? "login" : "signup"));
+    document.createTextNode(t(signingUp ? "login.haveAccount" : "login.noAccount")),
+    switchButton(t(signingUp ? "login.logIn" : "login.signUp"), signingUp ? "login" : "signup"));
   if (!loginDialog.open) {
     loginDialog.showModal();
   }
@@ -52,11 +53,11 @@ loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   // A quick check on the page. The server checks the same rules again.
   if (loginName.value.trim() === "") {
-    loginError.textContent = "The name must not be empty.";
+    loginError.textContent = fromServer("The name must not be empty.");
     return;
   }
   if (loginMode === "signup" && loginPassword.value.length < 8) {
-    loginError.textContent = "The password must be at least 8 characters.";
+    loginError.textContent = fromServer("The password must be at least 8 characters.");
     return;
   }
   loginSubmit.disabled = true;
@@ -107,9 +108,9 @@ export function openWrite(kind, postId = null) {
   }
   writing = { kind: kind, postId: postId };
   const original = state.posts.get(postId);
-  writeTitle.textContent = { post: "New post", reply: "Reply", quote: "Quote", edit: "Edit your post" }[kind];
-  writeSubmit.textContent = { post: "Post", reply: "Reply", quote: "Post", edit: "Save" }[kind];
-  writeText.placeholder = { reply: "Post your reply", quote: "Add a comment" }[kind] || "What is happening?";
+  writeTitle.textContent = t("write.title." + kind);
+  writeSubmit.textContent = t("write.button." + kind);
+  writeText.placeholder = kind === "reply" || kind === "quote" ? t("write.placeholder." + kind) : t("compose.placeholder");
   writeOriginal.replaceChildren();
   if ((kind === "reply" || kind === "quote") && original) {
     writeOriginal.append(postCard(original, { preview: true }));

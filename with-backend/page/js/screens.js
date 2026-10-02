@@ -2,6 +2,7 @@
 // { title, breadcrumb, tabs, nodes }. main.js puts it on the page.
 
 import { icon } from "./icons.js";
+import { t, tCount } from "./strings.js";
 import { exploreLink, fullTime, messagesLink, monthYear, postLink, profileLink, shortTime } from "./format.js";
 import { avatar, element, emptyNote, link, postCard, thread } from "./render.js";
 import { byAuthor, isFollowed, isMe, isShown, newestFirst, repliesTo, state } from "./state.js";
@@ -28,15 +29,15 @@ export function homeScreen(address) {
   const nodes = newestFirst(posts).map((post) => postCard(post));
   if (nodes.length === 0) {
     nodes.push(onlyFollowing
-      ? emptyNote("Nothing here yet", "When people you follow post, it shows up here. Open a profile and press Follow.")
-      : emptyNote("Nothing here yet", "Be the first to post."));
+      ? emptyNote(t("empty.nothingYet"), t("empty.followingText"))
+      : emptyNote(t("empty.nothingYet"), t("empty.beFirst")));
   }
   return {
-    title: "Home",
-    breadcrumb: ["Timeline", "Home"],
+    title: t("nav.home"),
+    breadcrumb: [t("app.name"), t("nav.home")],
     tabs: state.me === null ? [] : [
-      { label: "For everyone", href: "#/", current: !onlyFollowing },
-      { label: "Following", href: "#/following", current: onlyFollowing },
+      { label: t("tab.everyone"), href: "#/", current: !onlyFollowing },
+      { label: t("tab.following"), href: "#/following", current: onlyFollowing },
     ],
     nodes: nodes,
   };
@@ -54,7 +55,7 @@ export function messagesScreen(address) {
     const top = element("span", "conversation-top");
     top.append(element("span", "conversation-name", talk.name),
                element("span", "conversation-time", " · " + shortTime(talk.sent_at)));
-    words.append(top, element("span", "conversation-last", (talk.from_me ? "You: " : "") + talk.text));
+    words.append(top, element("span", "conversation-last", (talk.from_me ? t("messages.you") : "") + talk.text));
     row.append(avatar(talk.name, "normal", false), words);
     if (talk.unread > 0) {
       row.append(element("span", "conversation-dot", String(talk.unread)));
@@ -62,19 +63,19 @@ export function messagesScreen(address) {
     return row;
   });
   if (nodes.length === 0) {
-    nodes.push(emptyNote("Welcome to your inbox", "To start a conversation, open someone's profile and press Message."));
+    nodes.push(emptyNote(t("messages.welcome"), t("messages.welcomeText")));
   }
-  return { title: "Messages", breadcrumb: ["Timeline", "Messages"], tabs: [], nodes: nodes };
+  return { title: t("nav.messages"), breadcrumb: [t("app.name"), t("nav.messages")], tabs: [], nodes: nodes };
 }
 
 function chatScreen(name) {
   const back = link(messagesLink(), "back-link");
-  back.append(icon("back"), document.createTextNode("All conversations"));
+  back.append(icon("back"), document.createTextNode(t("messages.all")));
   const nodes = [back];
   const chat = state.chat && state.chat.with.toLowerCase() === name.toLowerCase() ? state.chat : null;
   const shownName = chat ? chat.with : name;
   if (chat === null) {
-    nodes.push(emptyNote(state.chat === false ? "There is no one called " + name : "Loading…"));
+    nodes.push(emptyNote(state.chat === false ? t("noOne", { name: name }) : t("loading")));
   } else {
     const who = link(profileLink(shownName), "chat-who");
     who.append(avatar(shownName, "big", false), element("span", "chat-who-name", shownName),
@@ -88,40 +89,35 @@ function chatScreen(name) {
       const time = element("p", "message-time", shortTime(message.sent_at));
       time.title = fullTime(message.sent_at);
       if (isLast && message.from_me && message.read) {
-        time.append(document.createTextNode(" · Seen"));
+        time.append(document.createTextNode(" · " + t("messages.seen")));
       }
       bubble.append(time);
       list.append(bubble);
     });
     if (chat.messages.length === 0) {
-      list.append(element("p", "chat-empty", "Say hello to " + shownName + "."));
+      list.append(element("p", "chat-empty", t("messages.sayHello", { name: shownName })));
     }
     nodes.push(list);
   }
-  return { title: shownName, breadcrumb: ["Timeline", "Messages"], tabs: [], nodes: nodes };
+  return { title: shownName, breadcrumb: [t("app.name"), t("nav.messages")], tabs: [], nodes: nodes };
 }
 
 // ---- Notifications: what happened to you ----
 
-const TOLD = {
-  like: ["heart", "liked your post"],
-  repost: ["repost", "reposted your post"],
-  quote: ["edit", "quoted your post"],
-  reply: ["reply", "replied to you"],
-  mention: ["mail", "mentioned you"],
-  follow: ["user", "followed you"],
-};
+// The icon for each kind of notification. The words are "notif.like" and so on in strings.js:
+// " liked your post" in English, "さんがあなたのポストをいいねしました" in Japanese, after the name.
+const TOLD_ICON = { like: "heart", repost: "repost", quote: "edit", reply: "reply", mention: "mail", follow: "user" };
 
 export function notificationsScreen() {
   const nodes = state.notifications.map(notificationRow);
   if (nodes.length === 0) {
-    nodes.push(emptyNote("Nothing yet", "When someone likes, reposts, quotes or replies to your posts, mentions you or follows you, you will see it here."));
+    nodes.push(emptyNote(t("notif.nothing"), t("notif.nothingText")));
   }
-  return { title: "Notifications", breadcrumb: ["Timeline", "Notifications"], tabs: [], nodes: nodes };
+  return { title: t("nav.notifications"), breadcrumb: [t("app.name"), t("nav.notifications")], tabs: [], nodes: nodes };
 }
 
 function notificationRow(told) {
-  const [iconName, words] = TOLD[told.kind];
+  const iconName = TOLD_ICON[told.kind];
   const row = link(told.kind === "follow" ? profileLink(told.actor) : postLink(told.post_id),
                    "notification notification-" + told.kind + (told.read ? "" : " unread"));
   const side = element("span", "notification-icon");
@@ -129,7 +125,7 @@ function notificationRow(told) {
   const main = element("span", "notification-main");
   main.append(avatar(told.actor, "small", false));
   const line = element("span", "notification-line");
-  line.append(element("strong", "notification-actor", told.actor), document.createTextNode(" " + words),
+  line.append(element("strong", "notification-actor", told.actor), document.createTextNode(t("notif." + told.kind)),
               element("span", "notification-time", " · " + shortTime(told.created_at)));
   main.append(line);
   const post = told.post_id === null ? null : state.posts.get(told.post_id);
@@ -146,11 +142,11 @@ export function bookmarksScreen() {
   const posts = state.bookmarks.map((id) => state.posts.get(id)).filter((post) => post && !post.deleted_at);
   const nodes = posts.map((post) => postCard(post, { replyingTo: true }));
   if (state.me === null) {
-    nodes.push(emptyNote("Log in to see your bookmarks"));
+    nodes.push(emptyNote(t("bookmarks.logIn")));
   } else if (nodes.length === 0) {
-    nodes.push(emptyNote("Save posts for later", "Press 🔖 under a post to save it here. Only you can see your bookmarks."));
+    nodes.push(emptyNote(t("bookmarks.empty"), t("bookmarks.emptyText")));
   }
-  return { title: "Bookmarks", breadcrumb: ["Timeline", "Bookmarks"], tabs: [], nodes: nodes };
+  return { title: t("nav.bookmarks"), breadcrumb: [t("app.name"), t("nav.bookmarks")], tabs: [], nodes: nodes };
 }
 
 // ---- Explore: search for posts, people and #tags ----
@@ -158,33 +154,33 @@ export function bookmarksScreen() {
 export function exploreScreen(address) {
   const nodes = [];
   const query = address.query;
-  const title = query.startsWith("#") && query.length > 1 ? query : "Explore";
+  const title = query.startsWith("#") && query.length > 1 ? query : t("nav.explore");
   if (query === "") {
     if (state.sidebar.trends.length > 0) {
-      nodes.push(element("h2", "section-title", "Trending this week"));
+      nodes.push(element("h2", "section-title", t("explore.trendingWeek")));
       nodes.push(...state.sidebar.trends.map((trend, index) => trendRow(trend, index, "trend-row-big")));
     } else {
-      nodes.push(emptyNote("Search Timeline", "Find posts, people and #tags. Try #kyoto or #kanji."));
+      nodes.push(emptyNote(t("explore.searchTitle"), t("explore.searchText")));
     }
   } else if (!state.search || state.search.query !== query) {
-    nodes.push(emptyNote("Searching…"));
+    nodes.push(emptyNote(t("explore.searching")));
   } else if (state.search.error) {
-    nodes.push(emptyNote("Nothing to search for", state.search.error));
+    nodes.push(emptyNote(t("explore.nothing"), state.search.error));
   } else {
     if (state.search.people.length > 0) {
-      nodes.push(element("h2", "section-title", "People"));
+      nodes.push(element("h2", "section-title", t("explore.people")));
       nodes.push(...state.search.people.map(personRow));
     }
     const posts = state.search.post_ids.map((id) => state.posts.get(id)).filter((post) => post && isShown(post));
     if (posts.length > 0) {
-      nodes.push(element("h2", "section-title", "Posts"));
+      nodes.push(element("h2", "section-title", t("explore.posts")));
       nodes.push(...posts.map((post) => postCard(post, { replyingTo: true })));
     }
     if (nodes.length === 0) {
-      nodes.push(emptyNote("No results for " + query, "Try other words, or a #tag."));
+      nodes.push(emptyNote(t("explore.noResults", { query: query }), t("explore.noResultsText")));
     }
   }
-  return { title: title, breadcrumb: ["Timeline", "Explore"], tabs: [], nodes: nodes };
+  return { title: title, breadcrumb: [t("app.name"), t("nav.explore")], tabs: [], nodes: nodes };
 }
 
 // A person in a list: avatar, name, @name and bio, the whole row a link to their profile.
@@ -207,9 +203,10 @@ export function postScreen(address) {
     post = state.posts.get(post.repost_of);   // a repost's page is the page of the post it shares
   }
   const back = link("#/", "back-link");
-  back.append(icon("back"), document.createTextNode("Back to the timeline"));
+  back.append(icon("back"), document.createTextNode(t("post.back")));
   if (!post) {
-    return { title: "Post", breadcrumb: ["Timeline", "Post"], tabs: [], nodes: [back, emptyNote("This post does not exist")] };
+    return { title: t("post.title"), breadcrumb: [t("app.name"), t("post.title")], tabs: [],
+             nodes: [back, emptyNote(t("post.missing"))] };
   }
   const above = [];
   for (let parent = state.posts.get(post.reply_to); parent; parent = state.posts.get(parent.reply_to)) {
@@ -221,7 +218,7 @@ export function postScreen(address) {
   for (const reply of repliesTo(post.id).filter(isShown)) {
     nodes.push(thread(reply));
   }
-  return { title: "Post", breadcrumb: ["Timeline", "Post"], tabs: [], nodes: nodes };
+  return { title: t("post.title"), breadcrumb: [t("app.name"), t("post.title")], tabs: [], nodes: nodes };
 }
 
 // ---- A profile ----
@@ -240,14 +237,14 @@ export function profileScreen(address) {
       : theirs.filter((post) => post.reply_to === null);
     const cards = newestFirst(shown).map((post) => postCard(post, { replyingTo: true }));
     nodes.push(...(cards.length > 0 ? cards : [emptyNote(
-      address.tab === "replies" ? name + " has not replied to anyone yet" : name + " has not posted yet")]));
+      t(address.tab === "replies" ? "profile.notReplied" : "profile.notPosted", { name: name }))]));
   }
   return {
     title: name,
-    breadcrumb: ["Timeline", "Profile"],
+    breadcrumb: [t("app.name"), t("nav.profile")],
     tabs: person ? [
-      { label: "Posts", href: profileLink(name), current: address.tab !== "replies" },
-      { label: "Replies", href: profileLink(name, "replies"), current: address.tab === "replies" },
+      { label: t("profile.tab.posts"), href: profileLink(name), current: address.tab !== "replies" },
+      { label: t("profile.tab.replies"), href: profileLink(name, "replies"), current: address.tab === "replies" },
     ] : [],
     nodes: nodes,
   };
@@ -260,23 +257,23 @@ function profileHeader(name, person) {
   const top = element("div", "profile-top");
   top.append(avatar(name, "big", false));
   if (person && isMe(person.name)) {
-    const edit = element("button", "button button-outline", "Edit profile");
+    const edit = element("button", "button button-outline", t("profile.edit"));
     edit.type = "button";
     edit.dataset.focus = "edit-profile";
     edit.addEventListener("click", profileHandlers.edit);
     top.append(edit);
   } else if (person && state.me !== null) {
     const message = link(messagesLink(person.name), "icon-button icon-button-outline");
-    message.setAttribute("aria-label", "Message " + person.name);
-    message.title = "Message";
+    message.setAttribute("aria-label", t("profile.messageName", { name: person.name }));
+    message.title = t("profile.message");
     message.append(icon("mail"));
     top.append(message);
     const follow = element("button", person.you_follow ? "button button-outline" : "button",
-                           person.you_follow ? "Following" : "Follow");
+                           person.you_follow ? t("profile.following") : t("profile.follow"));
     follow.type = "button";
     follow.dataset.focus = "follow";
     if (person.you_follow) {
-      follow.setAttribute("aria-label", "Unfollow " + person.name);
+      follow.setAttribute("aria-label", t("profile.unfollowName", { name: person.name }));
     }
     follow.addEventListener("click", profileHandlers.follow);
     top.append(follow);
@@ -285,17 +282,22 @@ function profileHeader(name, person) {
   header.append(element("h2", "profile-name", name));
   header.append(element("p", "profile-handle", "@" + name));
   if (!person) {
-    header.append(element("p", "profile-facts", state.profile === false ? "There is no one called " + name + "." : ""));
+    header.append(element("p", "profile-facts", state.profile === false ? t("noOne", { name: name }) : ""));
     return header;
   }
   if (person.bio) {
     header.append(element("p", "profile-bio", person.bio));
   }
   const joined = element("p", "profile-facts");
-  joined.append(icon("calendar"), document.createTextNode("Joined " + monthYear(person.joined_at)));
+  joined.append(icon("calendar"), document.createTextNode(t("profile.joined", { date: monthYear(person.joined_at) })));
   header.append(joined);
   const numbers = element("p", "profile-numbers");
-  for (const [count, word] of [[person.following, "Following"], [person.followers, person.followers === 1 ? "Follower" : "Followers"], [person.posts, person.posts === 1 ? "Post" : "Posts"]]) {
+  const counts = [
+    [person.following, t("profile.followingCount")],
+    [person.followers, tCount("profile.followers", person.followers)],
+    [person.posts, tCount("profile.posts", person.posts)],
+  ];
+  for (const [count, word] of counts) {
     const pair = element("span", "profile-number");
     pair.append(element("strong", "", String(count)), document.createTextNode(" " + word));
     numbers.append(pair);
@@ -309,9 +311,9 @@ function profileHeader(name, person) {
 // One trending #tag: its place, the tag, and how many posts have it.
 function trendRow(trend, index, className = "") {
   const row = link(exploreLink("#" + trend.tag), "trend-row " + className);
-  row.append(element("span", "trend-place", (index + 1) + " · Trending"),
+  row.append(element("span", "trend-place", t("side.trending", { place: index + 1 })),
              element("span", "trend-tag", "#" + trend.tag),
-             element("span", "trend-count", trend.posts + (trend.posts === 1 ? " post" : " posts")));
+             element("span", "trend-count", tCount("side.posts", trend.posts)));
   return row;
 }
 
@@ -319,12 +321,12 @@ export function sidebar(openLogin) {
   const nodes = [];
   if (state.me === null) {
     const box = element("section", "side-box");
-    box.append(element("h2", "side-title", "New to Timeline?"));
-    box.append(element("p", "side-text", "Sign up to post, reply, like and follow."));
-    const signUp = element("button", "button button-wide", "Sign up");
+    box.append(element("h2", "side-title", t("side.newTitle")));
+    box.append(element("p", "side-text", t("side.newText")));
+    const signUp = element("button", "button button-wide", t("login.signUp"));
     signUp.type = "button";
     signUp.addEventListener("click", () => openLogin("signup"));
-    const logIn = element("button", "button button-wide button-outline", "Log in");
+    const logIn = element("button", "button button-wide button-outline", t("login.logIn"));
     logIn.type = "button";
     logIn.addEventListener("click", () => openLogin("login"));
     box.append(signUp, logIn);
@@ -332,13 +334,13 @@ export function sidebar(openLogin) {
   }
   if (state.sidebar.trends.length > 0) {
     const box = element("section", "side-box");
-    box.append(element("h2", "side-title", "What's happening"));
+    box.append(element("h2", "side-title", t("side.happening")));
     box.append(...state.sidebar.trends.map((trend, index) => trendRow(trend, index)));
     nodes.push(box);
   }
   if (state.sidebar.suggestions.length > 0) {
     const box = element("section", "side-box");
-    box.append(element("h2", "side-title", "Who to follow"));
+    box.append(element("h2", "side-title", t("side.whoToFollow")));
     for (const person of state.sidebar.suggestions) {
       const row = element("div", "side-person");
       const who = link(profileLink(person.name), "side-person-link");
@@ -348,10 +350,10 @@ export function sidebar(openLogin) {
       who.append(avatar(person.name, "normal", false), words);
       row.append(who);
       if (state.me !== null) {
-        const follow = element("button", "button button-small", "Follow");
+        const follow = element("button", "button button-small", t("side.follow"));
         follow.type = "button";
         follow.dataset.focus = "side-follow-" + person.name;
-        follow.setAttribute("aria-label", "Follow " + person.name);
+        follow.setAttribute("aria-label", t("side.followName", { name: person.name }));
         follow.addEventListener("click", () => sidebarHandlers.follow(person.name));
         row.append(follow);
       }
@@ -359,8 +361,7 @@ export function sidebar(openLogin) {
     }
     nodes.push(box);
   }
-  const about = element("p", "side-about",
-    "Timeline · a class project. Colours and fonts after the Kansai Gaidai Asian Studies Program site.");
+  const about = element("p", "side-about", t("side.about"));
   nodes.push(about);
   return nodes;
 }

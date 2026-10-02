@@ -1,7 +1,8 @@
 // Talking to the server. The browser sends the login cookie by itself with every request;
 // this page cannot read it (it is HttpOnly), and does not need to.
+// The server's messages are in English; fromServer shows them in the page's language.
 
-export const CANNOT_REACH = "Cannot reach the server. Trying again every second.";
+import { fromServer, t } from "./strings.js";
 
 let whenLoggedOut = () => {};
 
@@ -24,11 +25,11 @@ export async function send(method, path, data) {
       whenLoggedOut();
     }
     if (!response.ok) {
-      return { error: answer.error };
+      return { error: fromServer(answer.error) };
     }
     return { answer: answer };
   } catch (error) {
-    return { error: CANNOT_REACH };
+    return { error: t("status.cannotReach") };
   }
 }
 
@@ -44,9 +45,9 @@ export async function uploadPicture(file) {
     if (response.status === 401) {
       whenLoggedOut();
     }
-    return response.ok ? { answer: answer } : { error: answer.error };
+    return response.ok ? { answer: answer } : { error: fromServer(answer.error) };
   } catch (error) {
-    return { error: CANNOT_REACH };
+    return { error: t("status.cannotReach") };
   }
 }
 
@@ -55,7 +56,7 @@ export async function get(path) {
   const response = await fetch(path);
   const answer = await response.json();
   if (!response.ok) {
-    throw new Error(answer.error);
+    throw new Error(fromServer(answer.error));
   }
   return answer;
 }
@@ -63,8 +64,19 @@ export async function get(path) {
 // The line under the header, for problems.
 export function showStatus(words) {
   const line = document.getElementById("status");
+  delete line.dataset.offline;
   line.textContent = words;
   line.hidden = !words;
+}
+
+// "Cannot reach the server": marked, so that it can be taken away when the server is back.
+export function showOffline() {
+  showStatus(t("status.cannotReach"));
+  document.getElementById("status").dataset.offline = "yes";
+}
+
+export function isOffline() {
+  return document.getElementById("status").dataset.offline === "yes";
 }
 
 // A short message at the bottom that goes away by itself, for things that worked.

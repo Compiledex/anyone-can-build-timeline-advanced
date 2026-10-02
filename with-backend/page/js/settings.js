@@ -1,4 +1,5 @@
-// Your settings, kept in this browser (localStorage): the colours (System, Light or Dark).
+// Your settings, kept in this browser (localStorage): the colours (System, Light or Dark),
+// and the language of the page (English or Japanese).
 // They are only about how the page looks, so the server never hears of them.
 // Every read and write is wrapped in try, because some browsers keep nothing (a private window).
 
@@ -39,4 +40,17 @@ export function setTheme(theme) {
 // System → Light → Dark → System …
 export function nextTheme() {
   return THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+}
+
+const LANGUAGE_KEY = "timeline-language";
+export const LANGUAGES = ["en", "ja"];
+
+// "en" (the original) or "ja".
+export function currentLanguage() {
+  const language = load(LANGUAGE_KEY, "en");
+  return LANGUAGES.includes(language) ? language : "en";
+}
+
+export function setLanguage(language) {
+  save(LANGUAGE_KEY, language);
 }

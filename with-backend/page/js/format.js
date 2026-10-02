@@ -1,4 +1,7 @@
 // Small helpers for showing things: times, counts, initials, avatar colours, and addresses.
+// Times and dates follow the page's language: "5m" or "5分", "2 Oct" or "10月2日".
+
+import { locale, t } from "./strings.js";
 
 // The server sends times as "2026-10-02 15:42", local time.
 export function parseStamp(stamp) {
@@ -6,21 +9,21 @@ export function parseStamp(stamp) {
   return new Date(day + "T" + clock);
 }
 
-// "now", "5m", "3h", "30 Sep", or "30 Sep 2025" for another year.
+// "now", "5m", "3h", "30 Sep", or "30 Sep 2025" for another year (今, 5分, 3時間, 9月30日 in Japanese).
 export function shortTime(stamp) {
   const then = parseStamp(stamp);
   const seconds = (Date.now() - then.getTime()) / 1000;
   if (seconds < 60) {
-    return "now";
+    return t("time.now");
   }
   if (seconds < 60 * 60) {
-    return Math.floor(seconds / 60) + "m";
+    return t("time.minutes", { count: Math.floor(seconds / 60) });
   }
   if (seconds < 24 * 60 * 60) {
-    return Math.floor(seconds / (60 * 60)) + "h";
+    return t("time.hours", { count: Math.floor(seconds / (60 * 60)) });
   }
   const sameYear = then.getFullYear() === new Date().getFullYear();
-  return then.toLocaleDateString("en-GB", sameYear
+  return then.toLocaleDateString(locale(), sameYear
     ? { day: "numeric", month: "short" }
     : { day: "numeric", month: "short", year: "numeric" });
 }
@@ -29,12 +32,12 @@ export function shortTime(stamp) {
 export function fullTime(stamp) {
   const then = parseStamp(stamp);
   return stamp.split(" ")[1] + " · " +
-    then.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    then.toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
 }
 
 // "October 2026", for "Joined October 2026".
 export function monthYear(stamp) {
-  return parseStamp(stamp).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  return parseStamp(stamp).toLocaleDateString(locale(), { month: "long", year: "numeric" });
 }
 
 // "1 post", "2 posts".

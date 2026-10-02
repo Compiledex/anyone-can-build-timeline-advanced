@@ -29,46 +29,47 @@
   <div class="app">
 
     <!-- Left: the logo and the menu. On a phone, the menu becomes a bar at the bottom. -->
-    <nav class="side-nav" aria-label="Main menu">
-      <a class="logo" href="#/" aria-label="Timeline, home">
+    <nav class="side-nav" aria-label="Main menu" data-i18n-label="nav.main">
+      <a class="logo" href="#/" aria-label="Timeline, home" data-i18n-label="nav.homeLink">
         <span class="logo-mark" aria-hidden="true">結</span>
         <span class="logo-word">Timeline</span>
       </a>
       <ul class="nav-list">
-        <li><a class="nav-link" href="#/" data-screen="home"><span data-icon="home"></span><span class="nav-label">Home</span></a></li>
-        <li><a class="nav-link" href="#/explore" data-screen="explore"><span data-icon="hash"></span><span class="nav-label">Explore</span></a></li>
-        <li><a class="nav-link" href="#/notifications" data-screen="notifications" data-needs-login hidden><span class="nav-icon"><span data-icon="bell"></span><span class="badge" id="nav-badge" hidden></span></span><span class="nav-label">Notifications</span></a></li>
-        <li><a class="nav-link" href="#/messages" data-screen="messages" data-needs-login hidden><span class="nav-icon"><span data-icon="mail"></span><span class="badge" id="nav-messages-badge" hidden></span></span><span class="nav-label">Messages</span></a></li>
-        <li><a class="nav-link" href="#/bookmarks" data-screen="bookmarks" data-needs-login hidden><span data-icon="bookmark"></span><span class="nav-label">Bookmarks</span></a></li>
-        <li><a class="nav-link" id="nav-profile" href="#/" data-screen="profile" hidden><span data-icon="user"></span><span class="nav-label">Profile</span></a></li>
+        <li><a class="nav-link" href="#/" data-screen="home"><span data-icon="home"></span><span class="nav-label" data-i18n="nav.home">Home</span></a></li>
+        <li><a class="nav-link" href="#/explore" data-screen="explore"><span data-icon="hash"></span><span class="nav-label" data-i18n="nav.explore">Explore</span></a></li>
+        <li><a class="nav-link" href="#/notifications" data-screen="notifications" data-needs-login hidden><span class="nav-icon"><span data-icon="bell"></span><span class="badge" id="nav-badge" hidden></span></span><span class="nav-label" data-i18n="nav.notifications">Notifications</span></a></li>
+        <li><a class="nav-link" href="#/messages" data-screen="messages" data-needs-login hidden><span class="nav-icon"><span data-icon="mail"></span><span class="badge" id="nav-messages-badge" hidden></span></span><span class="nav-label" data-i18n="nav.messages">Messages</span></a></li>
+        <li><a class="nav-link" href="#/bookmarks" data-screen="bookmarks" data-needs-login hidden><span data-icon="bookmark"></span><span class="nav-label" data-i18n="nav.bookmarks">Bookmarks</span></a></li>
+        <li><a class="nav-link" id="nav-profile" href="#/" data-screen="profile" hidden><span data-icon="user"></span><span class="nav-label" data-i18n="nav.profile">Profile</span></a></li>
       </ul>
       <button type="button" id="nav-post" class="nav-post" hidden>
-        <span data-icon="feather"></span><span class="nav-label">Post</span>
+        <span data-icon="feather"></span><span class="nav-label" data-i18n="nav.post">Post</span>
       </button>
       <div id="nav-me" class="nav-me" hidden>
         <a id="nav-me-link" class="nav-me-link" href="#/">
           <span id="nav-me-avatar"></span>
           <span class="nav-me-name nav-label" id="nav-me-name"></span>
         </a>
-        <button type="button" id="log-out" class="icon-button" aria-label="Log out" title="Log out"><span data-icon="logout"></span></button>
+        <button type="button" id="log-out" class="icon-button" aria-label="Log out" title="Log out" data-i18n-label="nav.logOut" data-i18n-title="nav.logOut"><span data-icon="logout"></span></button>
       </div>
     </nav>
 
     <!-- Middle: the screen the address asks for. -->
     <main class="center">
       <header class="center-header">
-        <a class="mobile-logo logo-mark" href="#/" aria-label="Timeline, home">結</a>
+        <a class="mobile-logo logo-mark" href="#/" aria-label="Timeline, home" data-i18n-label="nav.homeLink">結</a>
         <div class="center-heading">
           <p class="breadcrumb" id="breadcrumb"></p>
           <h1 class="page-title" id="page-title">Home</h1>
         </div>
         <form id="search-form" class="search-form" role="search" hidden>
           <span data-icon="search"></span>
-          <label for="search-box" class="visually-hidden">Search</label>
-          <input id="search-box" type="search" placeholder="Search posts, people and #tags" maxlength="100" autocomplete="off">
+          <label for="search-box" class="visually-hidden" data-i18n="search.label">Search</label>
+          <input id="search-box" type="search" placeholder="Search posts, people and #tags" data-i18n-placeholder="search.placeholder" maxlength="100" autocomplete="off">
         </form>
         <nav class="tabs" id="tabs" aria-label="Timelines" hidden></nav>
         <div class="header-tools">
+          <button type="button" class="icon-button" id="language-button" lang=""></button>
           <button type="button" class="icon-button" id="theme-button"></button>
         </div>
       </header>
@@ -80,13 +81,13 @@
       <form id="compose" class="compose" hidden>
         <span id="compose-avatar"></span>
         <div class="compose-body">
-          <label for="compose-text" class="visually-hidden">What is happening?</label>
-          <textarea id="compose-text" rows="2" placeholder="What is happening?"></textarea>
+          <label for="compose-text" class="visually-hidden" data-i18n="compose.placeholder">What is happening?</label>
+          <textarea id="compose-text" rows="2" placeholder="What is happening?" data-i18n-placeholder="compose.placeholder"></textarea>
           <div class="picture-preview" id="compose-preview"></div>
           <div class="compose-row">
             <span class="compose-tools"></span>
             <span class="count" id="compose-count"></span>
-            <button type="submit" class="button">Post</button>
+            <button type="submit" class="button" data-i18n="compose.post">Post</button>
           </div>
         </div>
       </form>
@@ -96,18 +97,18 @@
       <!-- The box for a message, at the bottom of a conversation. Like the post box, it stays
            outside #screen, so that what you type is kept while new messages arrive. -->
       <form id="message-form" class="message-form" hidden>
-        <label for="message-text" class="visually-hidden">Your message</label>
-        <textarea id="message-text" rows="1" placeholder="Start a new message" maxlength="1000"></textarea>
-        <button type="submit" class="icon-button send-button" id="message-send" aria-label="Send"><span data-icon="send"></span></button>
+        <label for="message-text" class="visually-hidden" data-i18n="message.label">Your message</label>
+        <textarea id="message-text" rows="1" placeholder="Start a new message" data-i18n-placeholder="message.placeholder" maxlength="1000"></textarea>
+        <button type="submit" class="icon-button send-button" id="message-send" aria-label="Send" data-i18n-label="message.send"><span data-icon="send"></span></button>
       </form>
     </main>
 
     <!-- Right: the sidebar. Hidden on small screens. -->
-    <aside class="sidebar" aria-label="More">
+    <aside class="sidebar" aria-label="More" data-i18n-label="sidebar.label">
       <form class="search-form side-search" id="side-search" role="search">
         <span data-icon="search"></span>
-        <label for="side-search-box" class="visually-hidden">Search</label>
-        <input id="side-search-box" type="search" placeholder="Search" maxlength="100" autocomplete="off">
+        <label for="side-search-box" class="visually-hidden" data-i18n="search.side">Search</label>
+        <input id="side-search-box" type="search" placeholder="Search" data-i18n-placeholder="search.side" maxlength="100" autocomplete="off">
       </form>
       <div id="sidebar"></div>
     </aside>
@@ -117,12 +118,12 @@
   <div class="join-bar" id="join-bar" hidden>
     <div class="join-bar-inner">
       <div>
-        <p class="join-bar-title">Don't miss what's happening</p>
-        <p class="join-bar-text">People on Timeline are the first to know.</p>
+        <p class="join-bar-title" data-i18n="join.title">Don't miss what's happening</p>
+        <p class="join-bar-text" data-i18n="join.text">People on Timeline are the first to know.</p>
       </div>
       <div class="join-bar-buttons">
-        <button type="button" class="button button-outline-light" data-open-login="login">Log in</button>
-        <button type="button" class="button button-gold" data-open-login="signup">Sign up</button>
+        <button type="button" class="button button-outline-light" data-open-login="login" data-i18n="login.logIn">Log in</button>
+        <button type="button" class="button button-gold" data-open-login="signup" data-i18n="login.signUp">Sign up</button>
       </div>
     </div>
   </div>
@@ -130,12 +131,12 @@
   <!-- The log-in window. -->
   <dialog id="login-dialog" class="dialog" aria-labelledby="login-title">
     <form id="login-form" method="dialog" class="dialog-body">
-      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close" data-i18n-label="close"><span data-icon="close"></span></button>
       <span class="logo-mark logo-mark-big" aria-hidden="true">結</span>
       <h2 class="dialog-title" id="login-title">Log in to Timeline</h2>
-      <label for="login-name">Name</label>
+      <label for="login-name" data-i18n="login.name">Name</label>
       <input id="login-name" type="text" autocomplete="username" maxlength="40">
-      <label for="login-password">Password <span class="label-hint">(at least 8 characters)</span></label>
+      <label for="login-password"><span data-i18n="login.password">Password</span> <span class="label-hint" data-i18n="login.passwordHint">(at least 8 characters)</span></label>
       <input id="login-password" type="password" autocomplete="current-password">
       <p class="dialog-error" id="login-error" role="alert"></p>
       <button type="submit" class="button button-wide" id="login-submit">Log in</button>
@@ -146,10 +147,10 @@
   <!-- The window for a reply, a quote or an edit: the post it is about, then the box. -->
   <dialog id="compose-dialog" class="dialog" aria-labelledby="compose-dialog-title">
     <form id="compose-dialog-form" class="dialog-body">
-      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close" data-i18n-label="close"><span data-icon="close"></span></button>
       <h2 class="dialog-title dialog-title-small" id="compose-dialog-title"></h2>
       <div id="compose-dialog-original"></div>
-      <label for="compose-dialog-text" class="visually-hidden">Your text</label>
+      <label for="compose-dialog-text" class="visually-hidden" data-i18n="write.yourText">Your text</label>
       <textarea id="compose-dialog-text" rows="4"></textarea>
       <div class="picture-preview" id="compose-dialog-preview"></div>
       <p class="dialog-error" id="compose-dialog-error" role="alert"></p>
@@ -163,20 +164,20 @@
   <!-- The window for changing your own profile. -->
   <dialog id="profile-dialog" class="dialog" aria-labelledby="profile-dialog-title">
     <form id="profile-form" class="dialog-body">
-      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
-      <h2 class="dialog-title dialog-title-small" id="profile-dialog-title">Edit profile</h2>
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close" data-i18n-label="close"><span data-icon="close"></span></button>
+      <h2 class="dialog-title dialog-title-small" id="profile-dialog-title" data-i18n="profileDialog.title">Edit profile</h2>
       <div class="profile-picture-row">
         <span id="profile-picture-preview"></span>
         <div class="profile-picture-buttons">
-          <button type="button" class="button button-outline" id="profile-picture-change">Change picture</button>
-          <button type="button" class="text-button danger-text" id="profile-picture-remove">Remove picture</button>
+          <button type="button" class="button button-outline" id="profile-picture-change" data-i18n="profileDialog.changePicture">Change picture</button>
+          <button type="button" class="text-button danger-text" id="profile-picture-remove" data-i18n="profileDialog.removePicture">Remove picture</button>
         </div>
       </div>
-      <label for="profile-bio">Bio <span class="label-hint">(up to 160 characters)</span></label>
+      <label for="profile-bio"><span data-i18n="profileDialog.bio">Bio</span> <span class="label-hint" data-i18n="profileDialog.bioHint">(up to 160 characters)</span></label>
       <textarea id="profile-bio" class="field" rows="3"></textarea>
       <p class="count field-count" id="profile-bio-count"></p>
       <p class="dialog-error" id="profile-error" role="alert"></p>
-      <button type="submit" class="button button-wide" id="profile-save">Save</button>
+      <button type="submit" class="button button-wide" id="profile-save" data-i18n="profileDialog.save">Save</button>
     </form>
   </dialog>
 </body>

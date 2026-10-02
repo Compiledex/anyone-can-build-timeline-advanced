@@ -3,6 +3,7 @@
 // so a post is always shown as words and can never run code on the page.
 
 import { icon } from "./icons.js";
+import { t } from "./strings.js";
 import { avatarColour, exploreLink, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
 import {
   avatarOf, isBookmarked, isMe, isShown, likesOf, replyCount, repliesTo, repostCount, state, youReposted,
@@ -102,7 +103,7 @@ export function postCard(post, options = {}) {
 
   if (post.deleted_at) {
     card.classList.add("deleted");
-    card.append(element("p", "post-deleted-text", "This post was deleted."));
+    card.append(element("p", "post-deleted-text", t("post.deleted")));
     opensOnClick(card, post, options);   // its replies are on its own page
     return card;
   }
@@ -111,7 +112,7 @@ export function postCard(post, options = {}) {
   if (options.repost) {
     const line = element("p", "post-reposted");
     line.append(icon("repost"), document.createTextNode(
-      isMe(options.repost.author) ? "You reposted" : options.repost.author + " reposted"));
+      isMe(options.repost.author) ? t("post.youReposted") : t("post.reposted", { name: options.repost.author })));
     main.append(line);
   }
   const head = element("div", "post-head");
@@ -122,7 +123,7 @@ export function postCard(post, options = {}) {
     head.append(element("span", "post-dot", "·"), time);
   }
   if (post.edited_at) {
-    head.append(element("span", "post-edited", "· edited"));
+    head.append(element("span", "post-edited", t("post.edited")));
   }
   if (!options.preview && isMe(post.author)) {
     head.append(ownMenu(post));
@@ -132,7 +133,7 @@ export function postCard(post, options = {}) {
   if (options.replyingTo && post.reply_to !== null) {
     const parent = state.posts.get(post.reply_to);
     if (parent && !parent.deleted_at) {
-      const line = element("p", "post-replying", "Replying to ");
+      const line = element("p", "post-replying", t("post.replyingTo"));
       line.append(link(profileLink(parent.author), "", "@" + parent.author));
       main.append(line);
     }
@@ -179,7 +180,7 @@ function opensOnClick(card, post, options) {
 function postPicture(post) {
   const picture = element("img", "post-picture");
   picture.src = post.picture;
-  picture.alt = "A picture posted by " + post.author;
+  picture.alt = t("post.pictureAlt", { name: post.author });
   picture.loading = "lazy";
   return picture;
 }
@@ -187,7 +188,7 @@ function postPicture(post) {
 // The post a quote shows: small, in a box, opening the post when clicked.
 function quoteBox(quoted) {
   if (!quoted || quoted.deleted_at) {
-    return element("div", "quote-box quote-box-gone", "This post was deleted.");
+    return element("div", "quote-box quote-box-gone", t("post.deleted"));
   }
   const box = link(postLink(quoted.id), "quote-box");
   const head = element("span", "quote-head");
@@ -207,14 +208,15 @@ function quoteBox(quoted) {
 function actionBar(post, focusPrefix) {
   const bar = element("div", "post-actions");
   const replies = replyCount(post.id);
-  bar.append(actionButton(focusPrefix, post.id, "reply", false, replies, "Reply", () => handlers.reply(post.id)));
+  bar.append(actionButton(focusPrefix, post.id, "reply", false, replies, t("action.reply"),
+                          () => handlers.reply(post.id)));
   bar.append(repostMenu(post, focusPrefix));
   const likes = likesOf(post.id);
   bar.append(actionButton(focusPrefix, post.id, "heart", likes.you_liked, likes.likes,
-                          likes.you_liked ? "Unlike" : "Like", () => handlers.like(post.id)));
+                          likes.you_liked ? t("action.unlike") : t("action.like"), () => handlers.like(post.id)));
   const saved = isBookmarked(post.id);
   bar.append(actionButton(focusPrefix, post.id, "bookmark", saved, 0,
-                          saved ? "Remove from Bookmarks" : "Bookmark", () => handlers.bookmark(post.id)));
+                          saved ? t("action.unbookmark") : t("action.bookmark"), () => handlers.bookmark(post.id)));
   return bar;
 }
 
@@ -225,12 +227,12 @@ function repostMenu(post, focusPrefix) {
   const menu = element("details", "post-menu repost-menu");
   const summary = element("summary", "action action-repost" + (reposted ? " active" : ""));
   summary.dataset.focus = focusPrefix + "repost-" + post.id;
-  summary.setAttribute("aria-label", (reposted ? "Reposted" : "Repost") + (count ? " (" + count + ")" : ""));
+  summary.setAttribute("aria-label", t(reposted ? "action.reposted" : "action.repost") + (count ? " (" + count + ")" : ""));
   summary.append(icon("repost"), element("span", "action-count", count > 0 ? String(count) : ""));
   const list = element("div", "post-menu-list post-menu-list-left");
   list.append(
-    menuItem("repost", reposted ? "Undo repost" : "Repost", () => handlers.repost(post.id, reposted), menu),
-    menuItem("edit", "Quote", () => handlers.quote(post.id), menu));
+    menuItem("repost", t(reposted ? "action.undoRepost" : "action.repost"), () => handlers.repost(post.id, reposted), menu),
+    menuItem("edit", t("action.quote"), () => handlers.quote(post.id), menu));
   menu.append(summary, list);
   return menu;
 }
@@ -263,10 +265,10 @@ function actionButton(focusPrefix, postId, iconName, active, count, label, onCli
 function ownMenu(post) {
   const menu = element("details", "post-menu");
   const summary = element("summary", "post-menu-button", "⋯");
-  summary.setAttribute("aria-label", "More");
+  summary.setAttribute("aria-label", t("action.more"));
   const list = element("div", "post-menu-list");
-  list.append(menuItem("edit", "Edit", () => handlers.edit(post.id), menu),
-              menuItem("trash", "Delete", () => handlers.remove(post.id), menu, true));
+  list.append(menuItem("edit", t("action.edit"), () => handlers.edit(post.id), menu),
+              menuItem("trash", t("action.delete"), () => handlers.remove(post.id), menu, true));
   menu.append(summary, list);
   return menu;
 }
