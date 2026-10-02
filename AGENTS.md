@@ -17,10 +17,10 @@ timeline, newest first. It comes in two versions with the same screen:
 |---|---|
 | `page-only/index.html` | The parts of the screen: name, post box, Post button, timeline. |
 | `page-only/style.css` | How the screen looks. |
-| `page-only/app.js` | Checks the rules and keeps the posts in this window's `sessionStorage`. |
+| `page-only/app.js` | Checks the rules and keeps the posts, replies, edits, deletes and likes in this window's `sessionStorage`. |
 | `with-backend/index.html` | The same screen as `page-only/index.html`. |
 | `with-backend/style.css` | The same look as `page-only/style.css`. |
-| `with-backend/app.js` | Sends each post to the server, and asks the server for new posts every second. |
+| `with-backend/app.js` | Sends each post, reply, edit, delete, like and unlike to the server, and asks it for new posts, like counts and changed posts every second. |
 | `with-backend/server.py` | The backend, in three labelled parts: **controller**, **model**, **view**. |
 | `with-backend/test_server.py` | The checks for `server.py`. |
 | `with-backend/timeline.db` | The database. The server creates it when it starts. It is not in git. |
@@ -29,17 +29,21 @@ timeline, newest first. It comes in two versions with the same screen:
 The three parts of `server.py`:
 
 - **Controller** (`TimelineHandler`): reads each request and picks what to do.
-- **Model** (`check_rules`, `user_id_for`, `save_post`, `posts_after`): the rules a post must follow, and
-  the database, in two tables: `users` (each person once) and `posts` (each post points at its author
-  by `author_id`). A name is kept once, in `users`; never copy it into another table.
-- **View** (`post_to_json`, `posts_to_json`): turns database rows into the JSON the page reads.
+- **Model** (`check_name`, `check_text`, `check_rules`, `find_post`, `user_id_for`, `save_post`,
+  `edit_post`, `delete_post`, `posts_after`, `changed_posts`, `like_post`, `unlike_post`, `like_counts`):
+  the rules a post, a reply, an edit, a delete and a like must follow, and the database, in three tables: `users` (each person
+  once), `posts` (each post points at its author by `author_id`; a reply also points at the post it
+  answers by `reply_to`; `edited_at` is set when the author edits it; a delete erases `text`, sets `deleted_at` and keeps the
+  row, so its replies stay) and `likes` (one row per post and
+  user, with `(post_id, user_id)` as its primary key, so a name can like a post only once). A name is kept once, in `users`; never copy it into another table.
+- **View** (`post_to_json`, `posts_to_json`, `like_count_to_json`, `like_counts_to_json`): turns database rows into the JSON the page reads.
 
 ## How to run it
 
 - Page-only: open `page-only/index.html` in a browser. Nothing to start.
 - With a backend: `make run`, then open <http://localhost:8009>. Press Ctrl+C to stop.
 - Start again with an empty timeline: `make reset`.
-- See what is saved: `sqlite3 with-backend/timeline.db 'select * from users; select * from posts'`
+- See what is saved: `sqlite3 with-backend/timeline.db 'select * from users; select * from posts; select * from likes'`
 
 It needs only `python3` (3.9 or newer). Do not add libraries, packages or a build step.
 Write code that runs on Python 3.9: no `match` statements, and no `X | Y` in type hints.

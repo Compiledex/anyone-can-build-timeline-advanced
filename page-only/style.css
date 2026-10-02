@@ -150,3 +150,81 @@ button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Something with the hidden attribute is never shown, whatever its other styles say. */
+[hidden] {
+  display: none !important;
+}
+
+/* "edited 15:50", after the time. */
+.post-edited {
+  margin-left: 12px;
+  color: var(--quiet);
+  font-style: italic;
+}
+
+/* The Like, Reply and Edit buttons under each post, and Cancel:
+   smaller and quieter than the Post button. */
+.post-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.small-button {
+  padding: 4px 18px;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.small-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* A post this name has liked. */
+.like-button.liked {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* Replies sit under their post, moved in a little, with a line on the left. */
+.replies {
+  margin: 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+  border-left: 3px solid var(--border);
+}
+
+.replies:not(:empty) {
+  margin-top: 12px;
+}
+
+.replies .post {
+  margin-bottom: 8px;
+}
+
+/* "Replying to Aiko" or "Editing your post", above the box. */
+.mode-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--author);
+  font-weight: 700;
+}
+
+/* A deleted post: no name, no time, no buttons; only "This post was deleted." */
+.post.deleted > .post-author,
+.post.deleted > .post-time {
+  display: none;
+}
+
+.post.deleted > .post-text {
+  margin: 0;
+  color: var(--quiet);
+  font-style: italic;
+}
