@@ -3,14 +3,14 @@
 Run it on an empty timeline:  make reset seed   (or: python3 seed.py)
 
 Every made-up person has the same password, PASSWORD below, so you can log in as any of them.
-Everything is saved through the model in server.py, so the made-up data follows the same
+Everything is saved through the model in model.py, so the made-up data follows the same
 rules as real data. The people and their posts are invented.
 """
 
 import random
 import time
 
-import server
+import model
 
 PASSWORD = "timeline123"
 
@@ -92,8 +92,8 @@ def stamp(minutes_ago):
 
 
 def seed(db_path):
-    server.create_tables(db_path)
-    connection = server.connect(db_path)
+    model.create_tables(db_path)
+    connection = model.connect(db_path)
     people_already = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     connection.close()
     if people_already:
@@ -105,16 +105,16 @@ def seed(db_path):
     # People: each joined a few days before the first post.
     user_ids = {}
     for name in PEOPLE:
-        token = server.sign_up(db_path, name, PASSWORD, joined_at=stamp(chance.randint(4400, 7000)))
-        user_ids[name] = server.user_for_token(db_path, token)["id"]
-        server.log_out(db_path, token)
+        token = model.sign_up(db_path, name, PASSWORD, joined_at=stamp(chance.randint(4400, 7000)))
+        user_ids[name] = model.user_for_token(db_path, token)["id"]
+        model.log_out(db_path, token)
 
     # Posts and replies, oldest first.
     post_ids = {}
     all_post_ids = []
     for key, author, minutes_ago, text, answers in POSTS:
         reply_to = post_ids[answers] if answers else None
-        row = server.save_post(db_path, user_ids[author], text, reply_to, posted_at=stamp(minutes_ago))
+        row = model.save_post(db_path, user_ids[author], text, reply_to, posted_at=stamp(minutes_ago))
         all_post_ids.append((row["id"], author, answers is None))
         if key:
             post_ids[key] = row["id"]
@@ -123,30 +123,30 @@ def seed(db_path):
     for post_id, author, is_post in all_post_ids:
         others = [name for name in PEOPLE if name != author]
         for name in chance.sample(others, chance.randint(1 if is_post else 0, 7 if is_post else 3)):
-            server.like_post(db_path, user_ids[name], post_id)
+            model.like_post(db_path, user_ids[name], post_id)
 
     # Follows: everyone follows between 3 and 7 others.
     follows = 0
     for name in PEOPLE:
         others = [other for other in PEOPLE if other != name]
         for other in chance.sample(others, chance.randint(3, 7)):
-            server.follow(db_path, user_ids[name], other)
+            model.follow(db_path, user_ids[name], other)
             follows += 1
 
     for key, text in EDITS.items():
         author = next(author for k, author, _, _, _ in POSTS if k == key)
-        server.edit_post(db_path, user_ids[author], post_ids[key], text)
+        model.edit_post(db_path, user_ids[author], post_ids[key], text)
     for key in DELETES:
         author = next(author for k, author, _, _, _ in POSTS if k == key)
-        server.delete_post(db_path, user_ids[author], post_ids[key])
+        model.delete_post(db_path, user_ids[author], post_ids[key])
 
     # Counted at the end: deleting a post also deletes its likes.
-    likes = sum(row["likes"] for row in server.like_counts(db_path))
+    likes = sum(row["likes"] for row in model.like_counts(db_path))
     return {"people": len(PEOPLE), "posts": len(POSTS), "likes": likes, "follows": follows}
 
 
 if __name__ == "__main__":
-    made = seed(server.DB_PATH)
+    made = seed(model.DB_PATH)
     print(f"Made {made['people']} people, {made['posts']} posts and replies, "
           f"{made['likes']} likes and {made['follows']} follows.")
     print(f"Log in as any of them with the password {PASSWORD}, for example: "

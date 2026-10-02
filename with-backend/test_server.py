@@ -1,4 +1,4 @@
-"""Tests for server.py. Run them with:  python3 -m unittest
+"""Tests for the backend (server.py, model.py, view.py) and seed.py. Run them with:  python3 -m unittest
 
 Most tests call the MODEL directly, with a database made only for the test.
 The last tests start the real server and talk to it, as the page does.
@@ -15,8 +15,10 @@ import unittest
 import urllib.error
 import urllib.request
 
+import model
 import seed
 import server
+import view
 
 PASSWORD = "correct horse"
 
@@ -27,22 +29,22 @@ class ModelTests(unittest.TestCase):
         # A new, empty database for every test, in a temporary folder.
         self.folder = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self.folder.name, "test.db")
-        server.create_tables(self.db_path)
+        model.create_tables(self.db_path)
         # Hashing a password is slow on purpose. The tests use fewer rounds, so they stay fast.
-        self.rounds = server.PASSWORD_ROUNDS
-        server.PASSWORD_ROUNDS = 1000
+        self.rounds = model.PASSWORD_ROUNDS
+        model.PASSWORD_ROUNDS = 1000
 
     def tearDown(self):
-        server.PASSWORD_ROUNDS = self.rounds
+        model.PASSWORD_ROUNDS = self.rounds
         self.folder.cleanup()
 
     def user(self, name):
         """Sign up a person with this name, and return their user id."""
-        token = server.sign_up(self.db_path, name, PASSWORD)
-        return server.user_for_token(self.db_path, token)["id"]
+        token = model.sign_up(self.db_path, name, PASSWORD)
+        return model.user_for_token(self.db_path, token)["id"]
 
     def query(self, sql):
-        connection = server.connect(self.db_path)
+        connection = model.connect(self.db_path)
         rows = connection.execute(sql).fetchall()
         connection.close()
         return rows
@@ -50,8 +52,8 @@ class ModelTests(unittest.TestCase):
     # ---- Accounts ----
 
     def test_sign_up_logs_you_in(self):
-        token = server.sign_up(self.db_path, " Aiko ", PASSWORD)
-        self.assertEqual(server.user_for_token(self.db_path, token)["name"], "Aiko")
+        token = model.sign_up(self.db_path, " Aiko ", PASSWORD)
+        self.assertEqual(model.user_for_token(self.db_path, token)["name"], "Aiko")
 
     def test_the_password_is_kept_only_as_a_hash(self):
         self.user("Aiko")
@@ -66,60 +68,60 @@ class ModelTests(unittest.TestCase):
         self.assertNotEqual(hashes[0], hashes[1])  # each has its own random salt
 
     def test_a_short_password_is_refused(self):
-        with self.assertRaises(server.RuleBroken):
-            server.sign_up(self.db_path, "Aiko", "1234567")
+        with self.assertRaises(model.RuleBroken):
+            model.sign_up(self.db_path, "Aiko", "1234567")
 
     def test_a_password_of_exactly_8_is_allowed(self):
-        server.sign_up(self.db_path, "Aiko", "12345678")
+        model.sign_up(self.db_path, "Aiko", "12345678")
 
     def test_an_empty_or_too_long_name_is_refused(self):
         for wrong in ["", "   ", "a" * 41, None]:
-            with self.assertRaises(server.RuleBroken):
-                server.sign_up(self.db_path, wrong, PASSWORD)
+            with self.assertRaises(model.RuleBroken):
+                model.sign_up(self.db_path, wrong, PASSWORD)
 
     def test_a_name_can_sign_up_only_once_whatever_its_capitals(self):
         self.user("Aiko")
         for same in ["Aiko", "aiko", " AIKO "]:
-            with self.assertRaises(server.RuleBroken):
-                server.sign_up(self.db_path, same, PASSWORD)
+            with self.assertRaises(model.RuleBroken):
+                model.sign_up(self.db_path, same, PASSWORD)
 
     def test_log_in_with_the_right_password(self):
         self.user("Aiko")
-        token = server.log_in(self.db_path, "aiko", PASSWORD)
-        self.assertEqual(server.user_for_token(self.db_path, token)["name"], "Aiko")
+        token = model.log_in(self.db_path, "aiko", PASSWORD)
+        self.assertEqual(model.user_for_token(self.db_path, token)["name"], "Aiko")
 
     def test_a_wrong_password_and_a_wrong_name_get_the_same_answer(self):
         self.user("Aiko")
         answers = []
         for name, password in [("Aiko", "wrong password"), ("Nobody", PASSWORD)]:
-            with self.assertRaises(server.RuleBroken) as caught:
-                server.log_in(self.db_path, name, password)
+            with self.assertRaises(model.RuleBroken) as caught:
+                model.log_in(self.db_path, name, password)
             answers.append(str(caught.exception))
         self.assertEqual(answers[0], answers[1])
 
     def test_log_out_ends_the_session(self):
-        token = server.sign_up(self.db_path, "Aiko", PASSWORD)
-        server.log_out(self.db_path, token)
-        with self.assertRaises(server.NotLoggedIn):
-            server.user_for_token(self.db_path, token)
+        token = model.sign_up(self.db_path, "Aiko", PASSWORD)
+        model.log_out(self.db_path, token)
+        with self.assertRaises(model.NotLoggedIn):
+            model.user_for_token(self.db_path, token)
 
     def test_a_made_up_or_empty_token_is_not_logged_in(self):
         self.user("Aiko")
         for wrong in ["made-up", "", None]:
-            self.assertIsNone(server.current_user(self.db_path, wrong))
-            with self.assertRaises(server.NotLoggedIn):
-                server.user_for_token(self.db_path, wrong)
+            self.assertIsNone(model.current_user(self.db_path, wrong))
+            with self.assertRaises(model.NotLoggedIn):
+                model.user_for_token(self.db_path, wrong)
 
     def test_an_old_session_is_not_logged_in(self):
-        token = server.sign_up(self.db_path, "Aiko", PASSWORD)
-        connection = server.connect(self.db_path)
+        token = model.sign_up(self.db_path, "Aiko", PASSWORD)
+        connection = model.connect(self.db_path)
         connection.execute("UPDATE sessions SET expires_at = '2000-01-01 00:00'")
         connection.commit()
         connection.close()
-        self.assertIsNone(server.current_user(self.db_path, token))
+        self.assertIsNone(model.current_user(self.db_path, token))
 
     def test_the_database_keeps_only_a_hash_of_the_token(self):
-        token = server.sign_up(self.db_path, "Aiko", PASSWORD)
+        token = model.sign_up(self.db_path, "Aiko", PASSWORD)
         stored = self.query("SELECT token_hash FROM sessions")[0]["token_hash"]
         self.assertNotEqual(stored, token)
 
@@ -129,28 +131,28 @@ class ModelTests(unittest.TestCase):
         connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)")
         connection.close()
         with self.assertRaises(SystemExit):
-            server.create_tables(old_path)
+            model.create_tables(old_path)
 
     # ---- Posts ----
 
     def test_empty_text_is_refused(self):
         aiko = self.user("Aiko")
-        with self.assertRaises(server.RuleBroken):
-            server.save_post(self.db_path, aiko, "   ")
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, aiko, "   ")
 
     def test_too_long_text_is_refused(self):
         aiko = self.user("Aiko")
-        with self.assertRaises(server.RuleBroken):
-            server.save_post(self.db_path, aiko, "a" * 281)
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, aiko, "a" * 281)
 
     def test_text_of_exactly_280_is_allowed(self):
         aiko = self.user("Aiko")
-        row = server.save_post(self.db_path, aiko, "a" * 280)
+        row = model.save_post(self.db_path, aiko, "a" * 280)
         self.assertEqual(len(row["text"]), 280)
 
     def test_saved_post_comes_back_with_id_author_and_time(self):
         aiko = self.user("Aiko")
-        row = server.save_post(self.db_path, aiko, " the library is open late ")
+        row = model.save_post(self.db_path, aiko, " the library is open late ")
         self.assertEqual(row["id"], 1)
         self.assertEqual(row["author"], "Aiko")
         self.assertEqual(row["text"], "the library is open late")
@@ -158,47 +160,47 @@ class ModelTests(unittest.TestCase):
 
     def test_a_post_points_at_its_author_by_id(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "the library is open late tonight")
+        model.save_post(self.db_path, aiko, "the library is open late tonight")
         post = self.query("SELECT * FROM posts")[0]
         self.assertEqual(post["author_id"], aiko)
         self.assertNotIn("author", post.keys())  # the name is kept once, in users
 
     def test_after_returns_only_newer_posts_oldest_first(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "first")
-        server.save_post(self.db_path, ben, "second")
-        server.save_post(self.db_path, aiko, "third")
-        rows = server.posts_after(self.db_path, 1)
+        model.save_post(self.db_path, aiko, "first")
+        model.save_post(self.db_path, ben, "second")
+        model.save_post(self.db_path, aiko, "third")
+        rows = model.posts_after(self.db_path, 1)
         self.assertEqual([row["text"] for row in rows], ["second", "third"])
 
     def test_log_line_has_the_time_the_author_and_the_text(self):
         aiko = self.user("Aiko")
-        row = server.save_post(self.db_path, aiko, "the library is open late tonight")
-        self.assertEqual(server.post_to_log_line(row),
+        row = model.save_post(self.db_path, aiko, "the library is open late tonight")
+        self.assertEqual(view.post_to_log_line(row),
                          row["posted_at"] + "  Aiko: the library is open late tonight")
 
     # ---- Likes ----
 
     def test_a_like_is_counted(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        rows = server.like_post(self.db_path, ben, 1)
-        self.assertEqual(server.like_counts_to_json(rows),
+        model.save_post(self.db_path, aiko, "hello")
+        rows = model.like_post(self.db_path, ben, 1)
+        self.assertEqual(view.like_counts_to_json(rows),
                          [{"post_id": 1, "likes": 1, "you_liked": True}])
 
     def test_the_same_person_cannot_like_a_post_twice(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        server.like_post(self.db_path, ben, 1)
-        with self.assertRaises(server.RuleBroken):
-            server.like_post(self.db_path, ben, 1)
-        self.assertEqual(server.like_counts(self.db_path)[0]["likes"], 1)
+        model.save_post(self.db_path, aiko, "hello")
+        model.like_post(self.db_path, ben, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.like_post(self.db_path, ben, 1)
+        self.assertEqual(model.like_counts(self.db_path)[0]["likes"], 1)
 
     def test_the_database_itself_refuses_a_second_like(self):
         # Even code that skips the model cannot save the same like twice.
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "hello")
-        connection = server.connect(self.db_path)
+        model.save_post(self.db_path, aiko, "hello")
+        connection = model.connect(self.db_path)
         connection.execute("INSERT INTO likes (post_id, user_id) VALUES (1, 1)")
         with self.assertRaises(sqlite3.IntegrityError):
             connection.execute("INSERT INTO likes (post_id, user_id) VALUES (1, 1)")
@@ -206,135 +208,135 @@ class ModelTests(unittest.TestCase):
 
     def test_like_counts_are_per_post_and_per_viewer(self):
         aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
-        server.save_post(self.db_path, aiko, "first")
-        server.save_post(self.db_path, ben, "second")
-        server.save_post(self.db_path, aiko, "third")
-        server.like_post(self.db_path, ben, 1)
-        server.like_post(self.db_path, ben, 3)
-        server.like_post(self.db_path, chen, 3)
-        self.assertEqual(server.like_counts_to_json(server.like_counts(self.db_path, chen)),
+        model.save_post(self.db_path, aiko, "first")
+        model.save_post(self.db_path, ben, "second")
+        model.save_post(self.db_path, aiko, "third")
+        model.like_post(self.db_path, ben, 1)
+        model.like_post(self.db_path, ben, 3)
+        model.like_post(self.db_path, chen, 3)
+        self.assertEqual(view.like_counts_to_json(model.like_counts(self.db_path, chen)),
                          [{"post_id": 1, "likes": 1, "you_liked": False},
                           {"post_id": 3, "likes": 2, "you_liked": True}])
-        nobody = server.like_counts_to_json(server.like_counts(self.db_path, None))
+        nobody = view.like_counts_to_json(model.like_counts(self.db_path, None))
         self.assertEqual([count["you_liked"] for count in nobody], [False, False])
 
     def test_liking_a_missing_post_is_refused(self):
         ben = self.user("Ben")
-        with self.assertRaises(server.NotFound):
-            server.like_post(self.db_path, ben, 7)
+        with self.assertRaises(model.NotFound):
+            model.like_post(self.db_path, ben, 7)
 
     def test_post_id_must_be_a_whole_number(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, aiko, "hello")
         for wrong in ["1", 1.5, True, None]:
-            with self.assertRaises(server.RuleBroken):
-                server.like_post(self.db_path, aiko, wrong)
+            with self.assertRaises(model.RuleBroken):
+                model.like_post(self.db_path, aiko, wrong)
 
     def test_unlike_takes_the_like_back(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        server.like_post(self.db_path, ben, 1)
-        self.assertEqual(server.unlike_post(self.db_path, ben, 1), [])
+        model.save_post(self.db_path, aiko, "hello")
+        model.like_post(self.db_path, ben, 1)
+        self.assertEqual(model.unlike_post(self.db_path, ben, 1), [])
 
     def test_unlike_without_a_like_is_refused(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        server.like_post(self.db_path, aiko, 1)
-        with self.assertRaises(server.RuleBroken):
-            server.unlike_post(self.db_path, ben, 1)
-        self.assertEqual(server.like_counts(self.db_path)[0]["likes"], 1)  # Aiko's like stays
+        model.save_post(self.db_path, aiko, "hello")
+        model.like_post(self.db_path, aiko, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.unlike_post(self.db_path, ben, 1)
+        self.assertEqual(model.like_counts(self.db_path)[0]["likes"], 1)  # Aiko's like stays
 
     # ---- Replies ----
 
     def test_a_reply_points_at_its_post(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "the library is open late tonight")
-        row = server.save_post(self.db_path, ben, "thanks!", 1)
-        self.assertEqual(server.post_to_json(row)["reply_to"], 1)
+        model.save_post(self.db_path, aiko, "the library is open late tonight")
+        row = model.save_post(self.db_path, ben, "thanks!", 1)
+        self.assertEqual(view.post_to_json(row)["reply_to"], 1)
 
     def test_a_reply_to_a_missing_post_is_refused(self):
         ben = self.user("Ben")
-        with self.assertRaises(server.NotFound):
-            server.save_post(self.db_path, ben, "thanks!", 7)
-        self.assertEqual(server.posts_after(self.db_path, 0), [])  # nothing was saved
+        with self.assertRaises(model.NotFound):
+            model.save_post(self.db_path, ben, "thanks!", 7)
+        self.assertEqual(model.posts_after(self.db_path, 0), [])  # nothing was saved
 
     def test_reply_to_must_be_a_whole_number(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, aiko, "hello")
         for wrong in ["1", 1.5, True]:
-            with self.assertRaises(server.RuleBroken):
-                server.save_post(self.db_path, aiko, "thanks!", wrong)
+            with self.assertRaises(model.RuleBroken):
+                model.save_post(self.db_path, aiko, "thanks!", wrong)
 
     # ---- Edit ----
 
     def test_the_author_can_edit_a_post(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "the libary is open late")
-        row = server.edit_post(self.db_path, aiko, 1, " the library is open late ")
+        model.save_post(self.db_path, aiko, "the libary is open late")
+        row = model.edit_post(self.db_path, aiko, 1, " the library is open late ")
         self.assertEqual(row["text"], "the library is open late")
         self.assertRegex(row["edited_at"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
 
     def test_someone_else_cannot_edit_a_post(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        with self.assertRaises(server.RuleBroken):
-            server.edit_post(self.db_path, ben, 1, "goodbye")
-        self.assertEqual(server.posts_after(self.db_path, 0)[0]["text"], "hello")
+        model.save_post(self.db_path, aiko, "hello")
+        with self.assertRaises(model.RuleBroken):
+            model.edit_post(self.db_path, ben, 1, "goodbye")
+        self.assertEqual(model.posts_after(self.db_path, 0)[0]["text"], "hello")
 
     def test_an_edit_follows_the_post_rules(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, aiko, "hello")
         for wrong in ["   ", "a" * 281]:
-            with self.assertRaises(server.RuleBroken):
-                server.edit_post(self.db_path, aiko, 1, wrong)
+            with self.assertRaises(model.RuleBroken):
+                model.edit_post(self.db_path, aiko, 1, wrong)
 
     # ---- Delete ----
 
     def test_the_author_can_delete_a_post(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "the library is open late tonight")
-        server.like_post(self.db_path, ben, 1)
-        row = server.delete_post(self.db_path, aiko, 1)
+        model.save_post(self.db_path, aiko, "the library is open late tonight")
+        model.like_post(self.db_path, ben, 1)
+        row = model.delete_post(self.db_path, aiko, 1)
         self.assertEqual(row["text"], "")                          # the words are gone
         self.assertIsNotNone(row["deleted_at"])
-        self.assertEqual(server.like_counts(self.db_path), [])     # and so are its likes
+        self.assertEqual(model.like_counts(self.db_path), [])     # and so are its likes
 
     def test_someone_else_cannot_delete_a_post(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        with self.assertRaises(server.RuleBroken):
-            server.delete_post(self.db_path, ben, 1)
+        model.save_post(self.db_path, aiko, "hello")
+        with self.assertRaises(model.RuleBroken):
+            model.delete_post(self.db_path, ben, 1)
 
     def test_replies_stay_when_their_post_is_deleted(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        server.save_post(self.db_path, ben, "hi Aiko!", 1)
-        server.delete_post(self.db_path, aiko, 1)
-        rows = server.posts_to_json(server.posts_after(self.db_path, 0))
+        model.save_post(self.db_path, aiko, "hello")
+        model.save_post(self.db_path, ben, "hi Aiko!", 1)
+        model.delete_post(self.db_path, aiko, 1)
+        rows = view.posts_to_json(model.posts_after(self.db_path, 0))
         self.assertEqual([(r["id"], r["text"], r["reply_to"]) for r in rows],
                          [(1, "", None), (2, "hi Aiko!", 1)])
 
     def test_a_deleted_post_cannot_be_liked_edited_replied_to_or_deleted_again(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "hello")
-        server.delete_post(self.db_path, aiko, 1)
-        with self.assertRaises(server.RuleBroken):
-            server.like_post(self.db_path, ben, 1)
-        with self.assertRaises(server.RuleBroken):
-            server.edit_post(self.db_path, aiko, 1, "back again")
-        with self.assertRaises(server.RuleBroken):
-            server.save_post(self.db_path, ben, "hi!", 1)
-        with self.assertRaises(server.RuleBroken):
-            server.delete_post(self.db_path, aiko, 1)
+        model.save_post(self.db_path, aiko, "hello")
+        model.delete_post(self.db_path, aiko, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.like_post(self.db_path, ben, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.edit_post(self.db_path, aiko, 1, "back again")
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, ben, "hi!", 1)
+        with self.assertRaises(model.RuleBroken):
+            model.delete_post(self.db_path, aiko, 1)
 
     def test_changed_posts_lists_only_edited_and_deleted_posts(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
-        server.save_post(self.db_path, aiko, "first")
-        server.save_post(self.db_path, ben, "second")
-        server.save_post(self.db_path, aiko, "third")
-        server.edit_post(self.db_path, ben, 2, "second, edited")
-        server.delete_post(self.db_path, aiko, 3)
-        rows = server.changed_posts(self.db_path)
+        model.save_post(self.db_path, aiko, "first")
+        model.save_post(self.db_path, ben, "second")
+        model.save_post(self.db_path, aiko, "third")
+        model.edit_post(self.db_path, ben, 2, "second, edited")
+        model.delete_post(self.db_path, aiko, 3)
+        rows = model.changed_posts(self.db_path)
         self.assertEqual([(row["id"], row["text"]) for row in rows],
                          [(2, "second, edited"), (3, "")])
 
@@ -343,37 +345,37 @@ class ModelTests(unittest.TestCase):
 
     def test_a_profile_has_the_name_join_time_and_posts(self):
         aiko = self.user("Aiko")
-        server.save_post(self.db_path, aiko, "first")
-        server.save_post(self.db_path, aiko, "second")
-        server.delete_post(self.db_path, aiko, 2)
-        row = server.profile(self.db_path, " aiko ")   # any capitals find the person
+        model.save_post(self.db_path, aiko, "first")
+        model.save_post(self.db_path, aiko, "second")
+        model.delete_post(self.db_path, aiko, 2)
+        row = model.profile(self.db_path, " aiko ")   # any capitals find the person
         self.assertEqual((row["name"], row["posts"]), ("Aiko", 1))   # a deleted post does not count
         self.assertRegex(row["joined_at"], r"^\d{4}-\d\d-\d\d \d\d:\d\d$")
 
     def test_a_profile_of_nobody_is_not_found(self):
         for wrong in ["Nobody", "", None]:
-            with self.assertRaises(server.NotFound):
-                server.profile(self.db_path, wrong)
+            with self.assertRaises(model.NotFound):
+                model.profile(self.db_path, wrong)
 
     # ---- Follows ----
 
     def test_follow_someone(self):
         aiko, ben = self.user("Aiko"), self.user("Ben")
         self.user("Chen")
-        server.follow(self.db_path, aiko, "chen")
-        server.follow(self.db_path, aiko, "Ben")
-        self.assertEqual([row["name"] for row in server.followed_by(self.db_path, aiko)],
+        model.follow(self.db_path, aiko, "chen")
+        model.follow(self.db_path, aiko, "Ben")
+        self.assertEqual([row["name"] for row in model.followed_by(self.db_path, aiko)],
                          ["Ben", "Chen"])
-        self.assertEqual(server.followed_by(self.db_path, ben), [])   # following is one way
+        self.assertEqual(model.followed_by(self.db_path, ben), [])   # following is one way
 
     def test_you_cannot_follow_yourself(self):
         aiko = self.user("Aiko")
-        with self.assertRaises(server.RuleBroken):
-            server.follow(self.db_path, aiko, "Aiko")
+        with self.assertRaises(model.RuleBroken):
+            model.follow(self.db_path, aiko, "Aiko")
 
     def test_the_database_itself_refuses_following_yourself(self):
         self.user("Aiko")
-        connection = server.connect(self.db_path)
+        connection = model.connect(self.db_path)
         with self.assertRaises(sqlite3.IntegrityError):
             connection.execute("INSERT INTO follows (follower_id, followed_id) VALUES (1, 1)")
         connection.close()
@@ -381,32 +383,32 @@ class ModelTests(unittest.TestCase):
     def test_you_cannot_follow_someone_twice(self):
         aiko = self.user("Aiko")
         self.user("Ben")
-        server.follow(self.db_path, aiko, "Ben")
-        with self.assertRaises(server.RuleBroken):
-            server.follow(self.db_path, aiko, "BEN")
+        model.follow(self.db_path, aiko, "Ben")
+        with self.assertRaises(model.RuleBroken):
+            model.follow(self.db_path, aiko, "BEN")
 
     def test_unfollow(self):
         aiko = self.user("Aiko")
         self.user("Ben")
-        server.follow(self.db_path, aiko, "Ben")
-        server.unfollow(self.db_path, aiko, "Ben")
-        self.assertEqual(server.followed_by(self.db_path, aiko), [])
-        with self.assertRaises(server.RuleBroken):
-            server.unfollow(self.db_path, aiko, "Ben")   # not following any more
+        model.follow(self.db_path, aiko, "Ben")
+        model.unfollow(self.db_path, aiko, "Ben")
+        self.assertEqual(model.followed_by(self.db_path, aiko), [])
+        with self.assertRaises(model.RuleBroken):
+            model.unfollow(self.db_path, aiko, "Ben")   # not following any more
 
     def test_following_nobody_is_not_found(self):
         aiko = self.user("Aiko")
-        with self.assertRaises(server.NotFound):
-            server.follow(self.db_path, aiko, "Nobody")
+        with self.assertRaises(model.NotFound):
+            model.follow(self.db_path, aiko, "Nobody")
 
     def test_a_profile_counts_followers_and_following(self):
         aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
-        server.follow(self.db_path, aiko, "Ben")
-        server.follow(self.db_path, chen, "Ben")
-        server.follow(self.db_path, ben, "Aiko")
-        row = server.profile_to_json(server.profile(self.db_path, "Ben", aiko))
+        model.follow(self.db_path, aiko, "Ben")
+        model.follow(self.db_path, chen, "Ben")
+        model.follow(self.db_path, ben, "Aiko")
+        row = view.profile_to_json(model.profile(self.db_path, "Ben", aiko))
         self.assertEqual((row["followers"], row["following"], row["you_follow"]), (2, 1, True))
-        row = server.profile_to_json(server.profile(self.db_path, "Ben", None))
+        row = view.profile_to_json(model.profile(self.db_path, "Ben", None))
         self.assertFalse(row["you_follow"])
 
 class BellTests(unittest.TestCase):
@@ -426,11 +428,11 @@ class SeedTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self.folder.name, "test.db")
-        self.rounds = server.PASSWORD_ROUNDS
-        server.PASSWORD_ROUNDS = 1000
+        self.rounds = model.PASSWORD_ROUNDS
+        model.PASSWORD_ROUNDS = 1000
 
     def tearDown(self):
-        server.PASSWORD_ROUNDS = self.rounds
+        model.PASSWORD_ROUNDS = self.rounds
         self.folder.cleanup()
 
     def test_seed_makes_a_lively_timeline(self):
@@ -438,7 +440,7 @@ class SeedTests(unittest.TestCase):
         self.assertEqual(made["people"], len(seed.PEOPLE))
         self.assertGreater(made["likes"], 0)
         self.assertGreater(made["follows"], 0)
-        rows = server.posts_to_json(server.posts_after(self.db_path, 0))
+        rows = view.posts_to_json(model.posts_after(self.db_path, 0))
         self.assertEqual(len(rows), len(seed.POSTS))
         self.assertTrue(any(row["reply_to"] for row in rows))
         self.assertEqual(len([row for row in rows if row["deleted_at"]]), len(seed.DELETES))
@@ -448,8 +450,8 @@ class SeedTests(unittest.TestCase):
 
     def test_a_made_up_person_can_log_in(self):
         seed.seed(self.db_path)
-        token = server.log_in(self.db_path, "Aiko", seed.PASSWORD)
-        self.assertEqual(server.user_for_token(self.db_path, token)["name"], "Aiko")
+        token = model.log_in(self.db_path, "Aiko", seed.PASSWORD)
+        self.assertEqual(model.user_for_token(self.db_path, token)["name"], "Aiko")
 
     def test_seed_refuses_a_timeline_that_is_not_empty(self):
         seed.seed(self.db_path)
@@ -462,8 +464,8 @@ class RealServerTest(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         db_path = os.path.join(self.folder.name, "test.db")
-        self.rounds = server.PASSWORD_ROUNDS
-        server.PASSWORD_ROUNDS = 1000
+        self.rounds = model.PASSWORD_ROUNDS
+        model.PASSWORD_ROUNDS = 1000
         # Port 0 asks the computer for any free port.
         self.server = server.make_server(0, db_path)
         self.base = "http://127.0.0.1:" + str(self.server.server_address[1])
@@ -472,7 +474,7 @@ class RealServerTest(unittest.TestCase):
     def tearDown(self):
         self.server.shutdown()
         self.server.server_close()
-        server.PASSWORD_ROUNDS = self.rounds
+        model.PASSWORD_ROUNDS = self.rounds
         self.folder.cleanup()
 
     def browser(self):
