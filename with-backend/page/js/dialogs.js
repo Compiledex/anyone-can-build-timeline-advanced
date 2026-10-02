@@ -7,6 +7,7 @@ import { postCard } from "./render.js";
 import { changed, setMe, state } from "./state.js";
 
 export const MAX_TEXT = 280;
+export const MAX_BIO = 160;
 
 // ---- Logging in, or signing up ----
 
@@ -143,8 +144,54 @@ export function updateCount(box, countLine, button) {
   button.disabled = box.value.trim() === "" || length > MAX_TEXT;
 }
 
+// ---- Editing your profile ----
+
+const profileDialog = document.getElementById("profile-dialog");
+const profileForm = document.getElementById("profile-form");
+const profileBio = document.getElementById("profile-bio");
+const profileBioCount = document.getElementById("profile-bio-count");
+const profileError = document.getElementById("profile-error");
+const profileSave = document.getElementById("profile-save");
+
+let whenProfileSaved = () => {};
+
+export function onProfileSaved(listener) {
+  whenProfileSaved = listener;
+}
+
+export function openEditProfile() {
+  profileBio.value = state.bio;
+  profileError.textContent = "";
+  updateBioCount();
+  profileDialog.showModal();
+  profileBio.focus();
+}
+
+function updateBioCount() {
+  const length = profileBio.value.trim().length;
+  profileBioCount.textContent = length + " / " + MAX_BIO;
+  profileBioCount.classList.toggle("too-long", length > MAX_BIO);
+  profileSave.disabled = length > MAX_BIO;
+}
+
+profileBio.addEventListener("input", updateBioCount);
+
+profileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  profileSave.disabled = true;
+  const { answer, error } = await send("PUT", "/me", { bio: profileBio.value });
+  profileSave.disabled = false;
+  if (error) {
+    profileError.textContent = error;
+    return;
+  }
+  setMe(answer);
+  profileDialog.close();
+  whenProfileSaved();
+});
+
 // Every window closes with its × button, and by clicking outside it.
-for (const dialog of [loginDialog, writeDialog]) {
+for (const dialog of [loginDialog, writeDialog, profileDialog]) {
   dialog.querySelector("[data-close]").addEventListener("click", () => dialog.close());
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) {

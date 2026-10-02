@@ -5,11 +5,12 @@ The view does not decide anything: it only chooses which fields to send, and the
 
 def me_to_json(user, following=()):
     return {"name": user["name"] if user else None,
+            "bio": user["bio"] if user else "",
             "following": [row["name"] for row in following]}
 
 
 def profile_to_json(row):
-    return {"name": row["name"], "joined_at": row["joined_at"], "posts": row["posts"],
+    return {"name": row["name"], "bio": row["bio"], "joined_at": row["joined_at"], "posts": row["posts"],
             "followers": row["followers"], "following": row["following"],
             "you_follow": row["you_follow"] == 1}
 

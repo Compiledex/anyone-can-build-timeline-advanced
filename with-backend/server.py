@@ -124,6 +124,12 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def get_me(self, query):
         self.send_me(200, model.current_user(self.db, self.session_token()))
 
+    def put_me(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        model.edit_profile(self.db, user["id"], data.get("bio"))
+        self.send_me(200, model.current_user(self.db, self.session_token()))
+
     # ---- People ----
 
     def get_users(self, query):
@@ -287,6 +293,7 @@ ROUTES = {
     ("POST", "/login"): TimelineHandler.post_login,
     ("POST", "/logout"): TimelineHandler.post_logout,
     ("GET", "/me"): TimelineHandler.get_me,
+    ("PUT", "/me"): TimelineHandler.put_me,
     ("GET", "/users"): TimelineHandler.get_users,
     ("POST", "/follows"): TimelineHandler.post_follows,
     ("DELETE", "/follows"): TimelineHandler.delete_follows,

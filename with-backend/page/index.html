@@ -119,5 +119,17 @@
       </div>
     </form>
   </dialog>
+  <!-- The window for changing your own profile. -->
+  <dialog id="profile-dialog" class="dialog" aria-labelledby="profile-dialog-title">
+    <form id="profile-form" class="dialog-body">
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
+      <h2 class="dialog-title dialog-title-small" id="profile-dialog-title">Edit profile</h2>
+      <label for="profile-bio">Bio <span class="label-hint">(up to 160 characters)</span></label>
+      <textarea id="profile-bio" class="field" rows="3"></textarea>
+      <p class="count field-count" id="profile-bio-count"></p>
+      <p class="dialog-error" id="profile-error" role="alert"></p>
+      <button type="submit" class="button button-wide" id="profile-save">Save</button>
+    </form>
+  </dialog>
 </body>
 </html>

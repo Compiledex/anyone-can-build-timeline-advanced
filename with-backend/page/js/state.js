@@ -3,6 +3,7 @@
 
 export const state = {
   me: null,               // the logged-in person's name, or null when nobody is logged in
+  bio: "",                // their bio
   following: new Set(),   // the names they follow, in small letters
   posts: new Map(),       // every post, by id, as the server sent it
   lastId: 0,              // the id of the newest post this window has
@@ -30,6 +31,7 @@ function same(a, b) {
 
 export function setMe(person) {
   state.me = person.name;
+  state.bio = person.bio || "";
   state.following = new Set(person.following.map((name) => name.toLowerCase()));
 }
 

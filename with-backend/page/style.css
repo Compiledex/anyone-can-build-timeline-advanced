@@ -832,6 +832,12 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
+.profile-bio {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .profile-handle,
 .profile-facts {
   display: flex;
@@ -989,6 +995,25 @@ a:hover {
 .dialog input:focus {
   border-color: var(--brand);
   outline: 2px solid var(--brand);
+}
+
+/* A text box with a border, for a bio. */
+.dialog textarea.field {
+  min-height: 90px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.dialog textarea.field:focus {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
+}
+
+.field-count {
+  margin: 4px 0 0;
+  text-align: right;
 }
 
 .dialog-error {

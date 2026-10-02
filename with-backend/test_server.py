@@ -411,6 +411,32 @@ class ModelTests(unittest.TestCase):
         row = view.profile_to_json(model.profile(self.db_path, "Ben", None))
         self.assertFalse(row["you_follow"])
 
+    # ---- Edit profile ----
+
+    def test_edit_your_bio(self):
+        aiko = self.user("Aiko")
+        model.edit_profile(self.db_path, aiko, "  Exchange student from Osaka. 🍁 ")
+        self.assertEqual(model.profile(self.db_path, "Aiko")["bio"], "Exchange student from Osaka. 🍁")
+        model.edit_profile(self.db_path, aiko, "")
+        self.assertEqual(model.profile(self.db_path, "Aiko")["bio"], "")   # an empty bio is allowed
+
+    def test_a_too_long_bio_is_refused(self):
+        aiko = self.user("Aiko")
+        model.edit_profile(self.db_path, aiko, "a" * 160)
+        with self.assertRaises(model.RuleBroken):
+            model.edit_profile(self.db_path, aiko, "a" * 161)
+
+    def test_an_older_database_gets_the_bio_column(self):
+        old_path = os.path.join(self.folder.name, "old.db")
+        connection = sqlite3.connect(old_path)
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE "
+                           "COLLATE NOCASE, password_hash TEXT NOT NULL, joined_at TEXT NOT NULL)")
+        connection.execute("INSERT INTO users (name, password_hash, joined_at) VALUES ('Aiko', 'x$1$00$00', '2026-10-01 10:00')")
+        connection.commit()
+        connection.close()
+        model.create_tables(old_path)
+        self.assertEqual(model.profile(old_path, "Aiko")["bio"], "")   # Aiko is still there
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -503,7 +529,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_sign_up_post_then_get(self):
         aiko = self.signed_up("Aiko")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "bio": "", "following": []}))
         status, post = self.send(aiko, "POST", "/posts", {"text": "hello"})
         self.assertEqual((status, post["author"]), (201, "Aiko"))
         status, posts = self.send(self.browser(), "GET", "/posts?after=0")  # anyone can read
@@ -520,7 +546,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_without_logging_in_you_can_read_but_not_write(self):
         stranger = self.browser()
-        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "following": []}))
+        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "bio": "", "following": []}))
         for method, path, data in [("POST", "/posts", {"text": "hello"}),
                                    ("POST", "/likes", {"post_id": 1}),
                                    ("PUT", "/posts", {"post_id": 1, "text": "hi"}),
@@ -532,12 +558,12 @@ class RealServerTest(unittest.TestCase):
     def test_log_out_then_log_in(self):
         aiko = self.signed_up("Aiko")
         self.send(aiko, "POST", "/logout")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "bio": "", "following": []}))
         self.assertEqual(self.send(aiko, "POST", "/posts", {"text": "hello"})[0], 401)
         status, _ = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": "wrong one"})
         self.assertEqual(status, 400)
         status, me = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": PASSWORD})
-        self.assertEqual((status, me), (200, {"name": "Aiko", "following": []}))
+        self.assertEqual((status, me), (200, {"name": "Aiko", "bio": "", "following": []}))
 
     def test_like_unlike_and_who_liked(self):
         aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
@@ -588,11 +614,11 @@ class RealServerTest(unittest.TestCase):
         self.signed_up("Ben")
         self.assertEqual(self.send(self.browser(), "POST", "/follows", {"name": "Ben"})[0], 401)
         self.assertEqual(self.send(aiko, "POST", "/follows", {"name": "ben"}),
-                         (201, {"name": "Aiko", "following": ["Ben"]}))
+                         (201, {"name": "Aiko", "bio": "", "following": ["Ben"]}))
         self.assertTrue(self.send(aiko, "GET", "/users?name=Ben")[1]["you_follow"])
         self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
         self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
-                         (200, {"name": "Aiko", "following": []}))
+                         (200, {"name": "Aiko", "bio": "", "following": []}))
 
 
     def open_events(self):
@@ -651,6 +677,15 @@ class RealServerTest(unittest.TestCase):
         for path in ["/model.py", "/server.py", "/timeline.db", "/../model.py", "/js/../../model.py",
                      "/%2e%2e/model.py", "/page/index.html", "/nothing.js"]:
             self.assertEqual(self.get_raw(path)[0], 404, path)
+
+
+    def test_edit_profile_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.assertEqual(self.send(self.browser(), "PUT", "/me", {"bio": "hi"})[0], 401)
+        status, me = self.send(aiko, "PUT", "/me", {"bio": "Kyoto weekends."})
+        self.assertEqual((status, me["bio"]), (200, "Kyoto weekends."))
+        self.assertEqual(self.send(aiko, "GET", "/users?name=Aiko")[1]["bio"], "Kyoto weekends.")
+        self.assertEqual(self.send(aiko, "PUT", "/me", {"bio": "a" * 161})[0], 400)
 
 
 if __name__ == "__main__":

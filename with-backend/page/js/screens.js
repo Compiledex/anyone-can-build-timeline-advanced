@@ -9,6 +9,7 @@ import { byAuthor, isFollowed, isMe, isShown, newestFirst, repliesTo, state } fr
 // What the buttons on a profile do. main.js fills these in.
 export const profileHandlers = {
   follow: () => {},
+  edit: () => {},
 };
 
 // ---- Home ----
@@ -93,7 +94,13 @@ function profileHeader(name, person) {
   header.append(element("div", "profile-banner"));
   const top = element("div", "profile-top");
   top.append(avatar(name, "big", false));
-  if (person && state.me !== null && !isMe(person.name)) {
+  if (person && isMe(person.name)) {
+    const edit = element("button", "button button-outline", "Edit profile");
+    edit.type = "button";
+    edit.dataset.focus = "edit-profile";
+    edit.addEventListener("click", profileHandlers.edit);
+    top.append(edit);
+  } else if (person && state.me !== null) {
     const follow = element("button", person.you_follow ? "button button-outline" : "button",
                            person.you_follow ? "Following" : "Follow");
     follow.type = "button";
@@ -110,6 +117,9 @@ function profileHeader(name, person) {
   if (!person) {
     header.append(element("p", "profile-facts", state.profile === false ? "There is no one called " + name + "." : ""));
     return header;
+  }
+  if (person.bio) {
+    header.append(element("p", "profile-bio", person.bio));
   }
   const joined = element("p", "profile-facts");
   joined.append(icon("calendar"), document.createTextNode("Joined " + monthYear(person.joined_at)));

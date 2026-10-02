@@ -1,7 +1,7 @@
 """Timeline: the MODEL. The rules, and the database that keeps everything.
 
 The tables:
-  users     each person once, with a hash of their password (never the password)
+  users     each person once, with a hash of their password (never the password), and a bio
   sessions  one row for each logged-in browser, with a hash of its token
   posts     each post points at its author by id; a reply also points at the post
             it answers; a deleted post keeps its row, with its text erased
@@ -28,6 +28,7 @@ MAX_TEXT = 280
 MAX_NAME = 40
 MIN_PASSWORD = 8
 MAX_PASSWORD = 200
+MAX_BIO = 160
 # Hashing a password is slow on purpose: someone who steals the database must
 # spend this much work on every single guess. The tests use fewer rounds.
 PASSWORD_ROUNDS = 600_000
@@ -70,7 +71,8 @@ def create_tables(db_path):
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE COLLATE NOCASE,  -- 'aiko' and 'Aiko' are the same name
             password_hash TEXT NOT NULL,               -- see hash_password; never the password
-            joined_at TEXT NOT NULL);
+            joined_at TEXT NOT NULL,
+            bio TEXT NOT NULL DEFAULT '');             -- a few words about themselves
 
         CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY,               -- a hash of the token in the cookie
@@ -100,7 +102,18 @@ def create_tables(db_path):
             PRIMARY KEY (follower_id, followed_id),
             CHECK (follower_id != followed_id));
     """)
+    # Columns that later versions added. An older timeline.db gets them, empty, so nothing is lost.
+    add_missing_columns(connection, "users", {"bio": "TEXT NOT NULL DEFAULT ''"})
+    connection.commit()
     connection.close()
+
+
+def add_missing_columns(connection, table, columns):
+    """Add each column (name: SQL type) that the table does not have yet."""
+    existing = {column["name"] for column in connection.execute(f"PRAGMA table_info({table})")}
+    for name, definition in columns.items():
+        if name not in existing:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 # Each post, with its author's name looked up in users. The view reads row["author"].
@@ -222,12 +235,12 @@ def log_out(db_path, token):
 
 
 def current_user(db_path, token):
-    """Return the logged-in user (id and name) for this token, or None."""
+    """Return the logged-in user (id, name and bio) for this token, or None."""
     if not isinstance(token, str) or token == "":
         return None
     connection = connect(db_path)
     row = connection.execute(
-        "SELECT users.id, users.name FROM sessions JOIN users ON users.id = sessions.user_id "
+        "SELECT users.id, users.name, users.bio FROM sessions JOIN users ON users.id = sessions.user_id "
         "WHERE sessions.token_hash = ? AND sessions.expires_at > ?",
         (token_hash(token), now())).fetchone()
     connection.close()
@@ -255,13 +268,13 @@ def find_user(connection, name):
 
 
 def profile(db_path, name, viewer_id=None):
-    """Return a person's name, when they joined, how many posts they have (not deleted ones),
-    how many followers and followed people they have, and whether the viewer follows them."""
+    """Return a person's name, bio, when they joined, how many posts they have (not deleted
+    ones), how many followers and followed people they have, and whether the viewer follows them."""
     connection = connect(db_path)
     try:
         user = find_user(connection, name)
         return connection.execute(
-            "SELECT name, joined_at, "
+            "SELECT name, bio, joined_at, "
             "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts, "
             "(SELECT COUNT(*) FROM follows WHERE followed_id = users.id) AS followers, "
             "(SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following, "
@@ -270,6 +283,27 @@ def profile(db_path, name, viewer_id=None):
             "FROM users WHERE id = ?", (viewer_id, user["id"])).fetchone()
     finally:
         connection.close()
+
+
+def check_bio(bio):
+    """Return the bio without extra spaces, or raise RuleBroken. An empty bio is allowed."""
+    if bio is None:
+        return ""
+    if not isinstance(bio, str):
+        raise RuleBroken("The bio must be text.")
+    bio = bio.strip()
+    if len(bio) > MAX_BIO:
+        raise RuleBroken(f"The bio must be {MAX_BIO} characters or fewer.")
+    return bio
+
+
+def edit_profile(db_path, user_id, bio):
+    """Check the rules, and change this user's bio."""
+    bio = check_bio(bio)
+    connection = connect(db_path)
+    connection.execute("UPDATE users SET bio = ? WHERE id = ?", (bio, user_id))
+    connection.commit()
+    connection.close()
 
 
 def follow(db_path, user_id, name):

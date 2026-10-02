@@ -6,7 +6,7 @@
 // new and draws the screen again.
 
 import { CANNOT_REACH, get, onLoggedOut, send, showStatus, toast } from "./api.js";
-import { openLogin, openWrite, onSent, updateCount } from "./dialogs.js";
+import { onProfileSaved, onSent, openEditProfile, openLogin, openWrite, updateCount } from "./dialogs.js";
 import { postLink, profileLink, readAddress } from "./format.js";
 import { fillIcons } from "./icons.js";
 import { avatar, element, handlers, link } from "./render.js";
@@ -219,6 +219,14 @@ profileHandlers.follow = async () => {
   await checkProfile();
   changed();
 };
+
+profileHandlers.edit = openEditProfile;
+
+onProfileSaved(async () => {
+  await checkProfile();
+  changed();
+  toast("Your profile was saved");
+});
 
 // After a post, a reply or an edit was sent: catch up, and say so.
 onSent((kind, post) => {
