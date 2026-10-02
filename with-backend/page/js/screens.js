@@ -12,6 +12,11 @@ export const profileHandlers = {
   edit: () => {},
 };
 
+// What the Follow buttons in the sidebar do. main.js fills this in.
+export const sidebarHandlers = {
+  follow: (name) => {},
+};
+
 // ---- Home ----
 
 export function homeScreen(address) {
@@ -96,7 +101,12 @@ export function exploreScreen(address) {
   const query = address.query;
   const title = query.startsWith("#") && query.length > 1 ? query : "Explore";
   if (query === "") {
-    nodes.push(emptyNote("Search Timeline", "Find posts, people and #tags. Try #kyoto or #kanji."));
+    if (state.sidebar.trends.length > 0) {
+      nodes.push(element("h2", "section-title", "Trending this week"));
+      nodes.push(...state.sidebar.trends.map((trend, index) => trendRow(trend, index, "trend-row-big")));
+    } else {
+      nodes.push(emptyNote("Search Timeline", "Find posts, people and #tags. Try #kyoto or #kanji."));
+    }
   } else if (!state.search || state.search.query !== query) {
     nodes.push(emptyNote("Searching…"));
   } else if (state.search.error) {
@@ -232,6 +242,15 @@ function profileHeader(name, person) {
 
 // ---- The sidebar on the right ----
 
+// One trending #tag: its place, the tag, and how many posts have it.
+function trendRow(trend, index, className = "") {
+  const row = link(exploreLink("#" + trend.tag), "trend-row " + className);
+  row.append(element("span", "trend-place", (index + 1) + " · Trending"),
+             element("span", "trend-tag", "#" + trend.tag),
+             element("span", "trend-count", trend.posts + (trend.posts === 1 ? " post" : " posts")));
+  return row;
+}
+
 export function sidebar(openLogin) {
   const nodes = [];
   if (state.me === null) {
@@ -246,17 +265,32 @@ export function sidebar(openLogin) {
     logIn.addEventListener("click", () => openLogin("login"));
     box.append(signUp, logIn);
     nodes.push(box);
-  } else {
+  }
+  if (state.sidebar.trends.length > 0) {
     const box = element("section", "side-box");
-    box.append(element("h2", "side-title", "You follow"));
-    const names = [...state.posts.values()].map((post) => post.author)
-      .filter((name, index, all) => isFollowed(name) && all.indexOf(name) === index);
-    if (names.length === 0) {
-      box.append(element("p", "side-text", "Nobody yet. Open a profile and press Follow."));
-    }
-    for (const name of names.sort((a, b) => a.localeCompare(b))) {
-      const row = link(profileLink(name), "side-person");
-      row.append(avatar(name, "small", false), element("span", "side-person-name", name));
+    box.append(element("h2", "side-title", "What's happening"));
+    box.append(...state.sidebar.trends.map((trend, index) => trendRow(trend, index)));
+    nodes.push(box);
+  }
+  if (state.sidebar.suggestions.length > 0) {
+    const box = element("section", "side-box");
+    box.append(element("h2", "side-title", "Who to follow"));
+    for (const person of state.sidebar.suggestions) {
+      const row = element("div", "side-person");
+      const who = link(profileLink(person.name), "side-person-link");
+      const words = element("span", "side-person-words");
+      words.append(element("span", "side-person-name", person.name),
+                   element("span", "side-person-handle", "@" + person.name));
+      who.append(avatar(person.name, "normal", false), words);
+      row.append(who);
+      if (state.me !== null) {
+        const follow = element("button", "button button-small", "Follow");
+        follow.type = "button";
+        follow.dataset.focus = "side-follow-" + person.name;
+        follow.setAttribute("aria-label", "Follow " + person.name);
+        follow.addEventListener("click", () => sidebarHandlers.follow(person.name));
+        row.append(follow);
+      }
       box.append(row);
     }
     nodes.push(box);

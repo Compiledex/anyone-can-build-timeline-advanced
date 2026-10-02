@@ -768,6 +768,36 @@ def changed_posts(db_path):
     return rows
 
 
+# ---- The sidebar: what is trending, and who to follow ----
+
+def trends(db_path, days=7, limit=5):
+    """The #tags used in the most posts in the last few days, with how many posts."""
+    since = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - days * 24 * 60 * 60))
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT post_tags.tag, COUNT(*) AS posts FROM post_tags JOIN posts ON posts.id = post_tags.post_id "
+        "WHERE posts.deleted_at IS NULL AND posts.posted_at >= ? "
+        "GROUP BY post_tags.tag ORDER BY posts DESC, post_tags.tag LIMIT ?", (since, limit)).fetchall()
+    connection.close()
+    return rows
+
+
+def suggestions(db_path, viewer_id=None, limit=3):
+    """People to follow: the ones with the most followers, leaving out the viewer and
+    everyone the viewer already follows."""
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT users.name, users.bio, avatars.file_name AS avatar_file, "
+        "(SELECT COUNT(*) FROM follows WHERE followed_id = users.id) AS followers FROM users "
+        "LEFT JOIN uploads AS avatars ON avatars.id = users.avatar_id "
+        "WHERE users.id IS NOT ? AND users.id NOT IN "
+        "(SELECT followed_id FROM follows WHERE follower_id IS ?) "
+        "ORDER BY followers DESC, users.name COLLATE NOCASE LIMIT ?",
+        (viewer_id, viewer_id, limit)).fetchall()
+    connection.close()
+    return rows
+
+
 # ---- Notifications ----
 
 def notify(connection, user_id, actor_id, kind, post_id=None):

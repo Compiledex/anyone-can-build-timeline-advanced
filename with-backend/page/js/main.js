@@ -13,7 +13,7 @@ import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
 import {
   bookmarksScreen, exploreScreen, homeScreen, notificationsScreen, postScreen, profileHandlers, profileScreen,
-  sidebar,
+  sidebar, sidebarHandlers,
 } from "./screens.js";
 import {
   addPosts, changed, isBookmarked, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
@@ -47,6 +47,8 @@ const SCREENS = {
 };
 const searchForm = document.getElementById("search-form");
 const searchBox = document.getElementById("search-box");
+const sideSearch = document.getElementById("side-search");
+const sideSearchBox = document.getElementById("side-search-box");
 
 function draw() {
   const address = readAddress();
@@ -78,6 +80,7 @@ function draw() {
   }));
   compose.hidden = address.screen !== "home" || state.me === null;
   searchForm.hidden = address.screen !== "explore";
+  sideSearch.hidden = address.screen === "explore";   // Explore has its own search box
   screenHolder.replaceChildren(...shown.nodes);
   sidebarHolder.replaceChildren(...sidebar(openLogin));
   drawMenu(address);
@@ -182,6 +185,10 @@ async function checkProfile() {
   }
 }
 
+async function checkSidebar() {
+  state.sidebar = await get("/sidebar");
+}
+
 async function checkSearch() {
   const address = readAddress();
   if (address.screen !== "explore" || address.query === "") {
@@ -220,6 +227,7 @@ async function catchUp() {
       await checkLikes();
       await checkBookmarks();
       await checkChanges();
+      await checkSidebar();
       await checkProfile();
       await checkSearch();
       await checkNotifications();
@@ -319,6 +327,18 @@ profileHandlers.follow = async () => {
 
 profileHandlers.edit = openEditProfile;
 
+sidebarHandlers.follow = async (name) => {
+  const { answer, error } = await send("POST", "/follows", { name: name });
+  if (error) {
+    showStatus(error);
+    return;
+  }
+  setMe(answer);
+  await checkSidebar().catch(() => {});
+  changed();
+  toast("You follow " + name + " now");
+};
+
 onProfileSaved(async () => {
   await checkPeople().catch(() => {});
   await checkProfile();
@@ -391,6 +411,11 @@ document.addEventListener("click", (event) => {
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
   location.hash = exploreLink(searchBox.value.trim());
+});
+sideSearch.addEventListener("submit", (event) => {
+  event.preventDefault();
+  location.hash = exploreLink(sideSearchBox.value.trim());
+  sideSearchBox.value = "";
 });
 
 // A new address: draw its screen, and ask for the profile or the search if it is one.

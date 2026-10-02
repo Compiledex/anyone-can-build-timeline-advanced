@@ -744,6 +744,28 @@ class ModelTests(unittest.TestCase):
         model.read_notifications(self.db_path, aiko)
         self.assertEqual(model.unread_notifications(self.db_path, aiko), 0)
 
+    # ---- The sidebar ----
+
+    def test_trends_are_the_most_used_tags_of_the_last_week(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "#kyoto #ramen")
+        model.save_post(self.db_path, ben, "#Kyoto again")
+        model.save_post(self.db_path, ben, "#nara", posted_at="2000-01-01 10:00")   # too long ago
+        model.save_post(self.db_path, aiko, "#gone")
+        model.delete_post(self.db_path, aiko, 4)
+        rows = [(row["tag"], row["posts"]) for row in model.trends(self.db_path)]
+        self.assertEqual(rows, [("kyoto", 2), ("ramen", 1)])
+
+    def test_suggestions_leave_out_you_and_who_you_follow(self):
+        aiko, ben, chen, dana = self.user("Aiko"), self.user("Ben"), self.user("Chen"), self.user("Dana")
+        model.follow(self.db_path, ben, "Chen")
+        model.follow(self.db_path, dana, "Chen")
+        model.follow(self.db_path, aiko, "Ben")
+        names = [row["name"] for row in model.suggestions(self.db_path, aiko)]
+        self.assertEqual(names, ["Chen", "Dana"])          # not Aiko, not Ben; Chen has most followers
+        everyone = [row["name"] for row in model.suggestions(self.db_path, None)]
+        self.assertEqual(everyone, ["Chen", "Ben", "Aiko"])   # for a visitor: the most followed
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -1073,6 +1095,15 @@ class RealServerTest(unittest.TestCase):
         self.assertEqual(self.send(ben, "GET", "/notifications"), (200, []))   # not Aiko's
         status, me = self.send(aiko, "POST", "/notifications/read")
         self.assertEqual((status, me["unread_notifications"]), (200, 0))
+
+
+    def test_sidebar_over_http(self):
+        aiko = self.signed_up("Aiko")
+        self.signed_up("Ben")
+        self.send(aiko, "POST", "/posts", {"text": "Hello #Hirakata"})
+        status, side = self.send(aiko, "GET", "/sidebar")
+        self.assertEqual((status, side["trends"]), (200, [{"tag": "hirakata", "posts": 1}]))
+        self.assertEqual([person["name"] for person in side["suggestions"]], ["Ben"])
 
 
 if __name__ == "__main__":

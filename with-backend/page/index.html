@@ -79,7 +79,14 @@
     </main>
 
     <!-- Right: the sidebar. Hidden on small screens. -->
-    <aside class="sidebar" id="sidebar" aria-label="More"></aside>
+    <aside class="sidebar" aria-label="More">
+      <form class="search-form side-search" id="side-search" role="search">
+        <span data-icon="search"></span>
+        <label for="side-search-box" class="visually-hidden">Search</label>
+        <input id="side-search-box" type="search" placeholder="Search" maxlength="100" autocomplete="off">
+      </form>
+      <div id="sidebar"></div>
+    </aside>
   </div>
 
   <!-- For visitors: a bar at the bottom, as on the real thing. -->

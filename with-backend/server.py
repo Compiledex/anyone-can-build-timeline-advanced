@@ -135,6 +135,11 @@ class TimelineHandler(BaseHTTPRequestHandler):
             model.set_avatar(self.db, user["id"], data["avatar_id"])
         self.send_me(200, model.current_user(self.db, self.session_token()))
 
+    def get_sidebar(self, query):
+        viewer = model.current_user(self.db, self.session_token())
+        viewer_id = viewer["id"] if viewer else None
+        self.send_json(200, view.sidebar_to_json(model.trends(self.db), model.suggestions(self.db, viewer_id)))
+
     def get_search(self, query):
         post_ids, people = model.search(self.db, query.get("q", [""])[0])
         self.send_json(200, view.search_to_json(post_ids, people))
@@ -351,7 +356,7 @@ class TimelineHandler(BaseHTTPRequestHandler):
         if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
                                                            "/users", "/events", "/people",
                                                            "/uploads", "/search", "/bookmarks",
-                                                           "/notifications")):
+                                                           "/notifications", "/sidebar")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
@@ -381,6 +386,7 @@ ROUTES = {
     ("PUT", "/me"): TimelineHandler.put_me,
     ("GET", "/people"): TimelineHandler.get_people,
     ("GET", "/search"): TimelineHandler.get_search,
+    ("GET", "/sidebar"): TimelineHandler.get_sidebar,
     ("POST", "/uploads"): TimelineHandler.post_uploads,
     ("GET", "/users"): TimelineHandler.get_users,
     ("POST", "/follows"): TimelineHandler.post_follows,

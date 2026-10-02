@@ -16,6 +16,7 @@ export const state = {
   notifications: [],      // your notifications, newest first, when the Notifications page is open
   profile: null,          // the profile on screen, as the server sent it
   search: null,           // what the search on screen found: { query, post_ids, people } or { query, error }
+  sidebar: { trends: [], suggestions: [] },   // what is trending, and who to follow
 };
 
 const listeners = [];

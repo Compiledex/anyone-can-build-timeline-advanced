@@ -70,3 +70,9 @@ def bookmarks_to_json(post_ids):
 def notifications_to_json(rows):
     return [{"id": row["id"], "kind": row["kind"], "actor": row["actor"], "post_id": row["post_id"],
              "created_at": row["created_at"], "read": row["read_at"] is not None} for row in rows]
+
+
+def sidebar_to_json(trends, suggestions):
+    return {"trends": [{"tag": row["tag"], "posts": row["posts"]} for row in trends],
+            "suggestions": [{"name": row["name"], "bio": row["bio"], "avatar": upload_url(row["avatar_file"]),
+                             "followers": row["followers"]} for row in suggestions]}

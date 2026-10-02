@@ -1260,25 +1260,92 @@ a:hover {
   color: var(--quiet);
 }
 
+.side-search {
+  margin: 0 0 16px;
+}
+
+/* Who to follow: avatar, name and @name, and a Follow button on the right. */
 .side-person {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 0 -16px;
-  padding: 8px 16px;
-  color: var(--text);
-  text-decoration: none;
+  padding: 10px 16px;
 }
 
 .side-person:hover {
   background: var(--hover);
+}
+
+.side-person-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   color: var(--text);
+  text-decoration: none;
+}
+
+.side-person-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .side-person-name {
+  overflow: hidden;
+  color: var(--brand);
   font-family: var(--serif);
   font-size: 18px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-person-handle {
+  color: var(--quiet);
+  font-size: 14px;
+}
+
+.button-small {
+  padding: 5px 16px;
+  font-size: 14px;
+}
+
+/* A trending #tag: its place, the tag, and how many posts. The number is in the site's lighter blue. */
+.trend-row {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -16px;
+  padding: 10px 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.trend-row:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.trend-row-big {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.trend-place,
+.trend-count {
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+.trend-tag {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.trend-count {
+  color: var(--number);
 }
 
 .side-about {
