@@ -7,6 +7,7 @@ The tables:
             it answers; a deleted post keeps its row, with its text erased
   likes     one row for each post and user who liked it
   follows   one row for each person and someone they follow
+  uploads   each uploaded picture; the file itself is in the uploads folder
 
 Only this file reads or writes the database. The controller (server.py) asks it
 to do things; a rule that is broken comes back as RuleBroken, with a message
@@ -29,6 +30,16 @@ MAX_NAME = 40
 MIN_PASSWORD = 8
 MAX_PASSWORD = 200
 MAX_BIO = 160
+MAX_UPLOAD = 2 * 1024 * 1024   # 2 MB for one picture
+
+# The pictures that may be uploaded, known by their first bytes, never by their name:
+# a file called "photo.jpg" can be anything. SVG is not here, because it can hold code.
+PICTURE_TYPES = [
+    (b"\x89PNG\r\n\x1a\n", "image/png", ".png"),
+    (b"\xff\xd8\xff", "image/jpeg", ".jpg"),
+    (b"GIF87a", "image/gif", ".gif"),
+    (b"GIF89a", "image/gif", ".gif"),
+]
 # Hashing a password is slow on purpose: someone who steals the database must
 # spend this much work on every single guess. The tests use fewer rounds.
 PASSWORD_ROUNDS = 600_000
@@ -72,7 +83,17 @@ def create_tables(db_path):
             name TEXT NOT NULL UNIQUE COLLATE NOCASE,  -- 'aiko' and 'Aiko' are the same name
             password_hash TEXT NOT NULL,               -- see hash_password; never the password
             joined_at TEXT NOT NULL,
-            bio TEXT NOT NULL DEFAULT '');             -- a few words about themselves
+            bio TEXT NOT NULL DEFAULT '',              -- a few words about themselves
+            avatar_id INTEGER REFERENCES uploads(id)); -- their picture, or empty
+
+        -- Each uploaded picture. The file is in the uploads folder next to the database,
+        -- under a random name; the name the person gave it is never used.
+        CREATE TABLE IF NOT EXISTS uploads (
+            id INTEGER PRIMARY KEY,
+            owner_id INTEGER NOT NULL REFERENCES users(id),
+            file_name TEXT NOT NULL UNIQUE,
+            content_type TEXT NOT NULL,
+            uploaded_at TEXT NOT NULL);
 
         CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY,               -- a hash of the token in the cookie
@@ -86,7 +107,8 @@ def create_tables(db_path):
             posted_at TEXT NOT NULL,
             reply_to INTEGER REFERENCES posts(id),     -- empty for a post, the answered post for a reply
             edited_at TEXT,                            -- empty until the author edits it
-            deleted_at TEXT);                          -- empty until the author deletes it
+            deleted_at TEXT,                           -- empty until the author deletes it
+            picture_id INTEGER REFERENCES uploads(id)); -- a picture in the post, or empty
 
         -- The primary key is the pair, so the database keeps each like only once.
         CREATE TABLE IF NOT EXISTS likes (
@@ -103,7 +125,9 @@ def create_tables(db_path):
             CHECK (follower_id != followed_id));
     """)
     # Columns that later versions added. An older timeline.db gets them, empty, so nothing is lost.
-    add_missing_columns(connection, "users", {"bio": "TEXT NOT NULL DEFAULT ''"})
+    add_missing_columns(connection, "users", {"bio": "TEXT NOT NULL DEFAULT ''",
+                                              "avatar_id": "INTEGER REFERENCES uploads(id)"})
+    add_missing_columns(connection, "posts", {"picture_id": "INTEGER REFERENCES uploads(id)"})
     connection.commit()
     connection.close()
 
@@ -118,8 +142,10 @@ def add_missing_columns(connection, table, columns):
 
 # Each post, with its author's name looked up in users. The view reads row["author"].
 POSTS_WITH_AUTHORS = ("SELECT posts.id, posts.author_id, users.name AS author, posts.text, "
-                      "posts.posted_at, posts.reply_to, posts.edited_at, posts.deleted_at "
-                      "FROM posts JOIN users ON users.id = posts.author_id")
+                      "posts.posted_at, posts.reply_to, posts.edited_at, posts.deleted_at, "
+                      "posts.picture_id, pictures.file_name AS picture_file "
+                      "FROM posts JOIN users ON users.id = posts.author_id "
+                      "LEFT JOIN uploads AS pictures ON pictures.id = posts.picture_id")
 
 # How many likes each post has, and whether one user is among them (1) or not (0 or empty).
 # The count is worked out from the rows, never stored.
@@ -240,7 +266,9 @@ def current_user(db_path, token):
         return None
     connection = connect(db_path)
     row = connection.execute(
-        "SELECT users.id, users.name, users.bio FROM sessions JOIN users ON users.id = sessions.user_id "
+        "SELECT users.id, users.name, users.bio, avatars.file_name AS avatar_file "
+        "FROM sessions JOIN users ON users.id = sessions.user_id "
+        "LEFT JOIN uploads AS avatars ON avatars.id = users.avatar_id "
         "WHERE sessions.token_hash = ? AND sessions.expires_at > ?",
         (token_hash(token), now())).fetchone()
     connection.close()
@@ -275,6 +303,7 @@ def profile(db_path, name, viewer_id=None):
         user = find_user(connection, name)
         return connection.execute(
             "SELECT name, bio, joined_at, "
+            "(SELECT file_name FROM uploads WHERE id = users.avatar_id) AS avatar_file, "
             "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts, "
             "(SELECT COUNT(*) FROM follows WHERE followed_id = users.id) AS followers, "
             "(SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following, "
@@ -304,6 +333,33 @@ def edit_profile(db_path, user_id, bio):
     connection.execute("UPDATE users SET bio = ? WHERE id = ?", (bio, user_id))
     connection.commit()
     connection.close()
+
+
+def set_avatar(db_path, user_id, upload_id):
+    """Make an unused upload of this user's their picture, or remove their picture (None).
+    The old picture, if any, is deleted."""
+    connection = connect(db_path)
+    try:
+        if upload_id is not None:
+            find_unused_upload(connection, upload_id, user_id)
+        old = connection.execute("SELECT avatar_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        connection.execute("UPDATE users SET avatar_id = ? WHERE id = ?", (upload_id, user_id))
+        if old["avatar_id"] is not None:
+            remove_upload(connection, db_path, old["avatar_id"])
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def people(db_path):
+    """Return everyone's name and picture, A to Z, so that the page can draw their avatars."""
+    connection = connect(db_path)
+    rows = connection.execute(
+        "SELECT users.name, avatars.file_name AS avatar_file FROM users "
+        "LEFT JOIN uploads AS avatars ON avatars.id = users.avatar_id "
+        "ORDER BY users.name COLLATE NOCASE").fetchall()
+    connection.close()
+    return rows
 
 
 def follow(db_path, user_id, name):
@@ -348,12 +404,97 @@ def followed_by(db_path, user_id):
     return rows
 
 
+# ---- Pictures ----
+
+def uploads_dir(db_path):
+    """The folder for uploaded pictures: next to the database, so a test's pictures stay with
+    the test's database."""
+    return os.path.join(os.path.dirname(os.path.abspath(db_path)), "uploads")
+
+
+def picture_type(data):
+    """Return (content type, file ending) for a picture we accept, or None."""
+    for start, content_type, ending in PICTURE_TYPES:
+        if data.startswith(start):
+            return content_type, ending
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", ".webp"
+    return None
+
+
+def save_upload(db_path, user_id, data):
+    """Check the rules, keep the picture under a new random name, and return its row."""
+    if not isinstance(data, bytes) or len(data) == 0:
+        raise RuleBroken("The picture is empty.")
+    if len(data) > MAX_UPLOAD:
+        raise RuleBroken(f"A picture must be {MAX_UPLOAD // (1024 * 1024)} MB or smaller.")
+    kind = picture_type(data)
+    if kind is None:
+        raise RuleBroken("Only JPEG, PNG, GIF and WebP pictures are allowed.")
+    content_type, ending = kind
+    file_name = secrets.token_urlsafe(18) + ending
+    folder = uploads_dir(db_path)
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, file_name), "wb") as file:
+        file.write(data)
+    connection = connect(db_path)
+    try:
+        cursor = connection.execute(
+            "INSERT INTO uploads (owner_id, file_name, content_type, uploaded_at) VALUES (?, ?, ?, ?)",
+            (user_id, file_name, content_type, now()))
+        connection.commit()
+        return connection.execute("SELECT * FROM uploads WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    finally:
+        connection.close()
+
+
+def find_unused_upload(connection, upload_id, user_id):
+    """Return the upload, or raise RuleBroken: it must exist, be this user's, and not be used yet
+    (in a post, or as anyone's picture)."""
+    if not isinstance(upload_id, int) or isinstance(upload_id, bool):
+        raise RuleBroken("'picture_id' must be a whole number.")
+    upload = connection.execute("SELECT * FROM uploads WHERE id = ?", (upload_id,)).fetchone()
+    if upload is None:
+        raise NotFound(f"There is no picture {upload_id}.")
+    if upload["owner_id"] != user_id:
+        raise RuleBroken("You can only use your own pictures.")
+    used = connection.execute(
+        "SELECT EXISTS (SELECT 1 FROM posts WHERE picture_id = ?) "
+        "OR EXISTS (SELECT 1 FROM users WHERE avatar_id = ?)", (upload_id, upload_id)).fetchone()[0]
+    if used:
+        raise RuleBroken("That picture is already used.")
+    return upload
+
+
+def remove_upload(connection, db_path, upload_id):
+    """Delete an upload's row and its file. The caller has made sure nothing points at it."""
+    upload = connection.execute("SELECT file_name FROM uploads WHERE id = ?", (upload_id,)).fetchone()
+    connection.execute("DELETE FROM uploads WHERE id = ?", (upload_id,))
+    try:
+        os.remove(os.path.join(uploads_dir(db_path), upload["file_name"]))
+    except OSError:
+        pass   # already gone
+
+
+def upload_file(db_path, file_name):
+    """Return (the file's full path, its content type) for a saved picture, or raise NotFound.
+    Only names that are in the uploads table are ever opened."""
+    connection = connect(db_path)
+    upload = connection.execute("SELECT file_name, content_type FROM uploads WHERE file_name = ?",
+                                (file_name,)).fetchone()
+    connection.close()
+    if upload is None:
+        raise NotFound("There is no such picture.")
+    return os.path.join(uploads_dir(db_path), upload["file_name"]), upload["content_type"]
+
+
 # ---- Posts ----
 
-def check_text(text):
-    """Return the text without extra spaces, or raise RuleBroken."""
+def check_text(text, has_picture=False):
+    """Return the text without extra spaces, or raise RuleBroken.
+    A post with a picture may have no text."""
     text = text.strip() if isinstance(text, str) else ""
-    if text == "":
+    if text == "" and not has_picture:
         raise RuleBroken("The post must not be empty.")
     if len(text) > MAX_TEXT:
         raise RuleBroken(f"The post must be {MAX_TEXT} characters or fewer.")
@@ -374,20 +515,23 @@ def find_post(connection, post_id, field="post_id"):
     return row
 
 
-def save_post(db_path, user_id, text, reply_to=None, posted_at=None):
+def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=None):
     """Check the rules, save the post, and return the saved row.
 
     reply_to is None for a new post, or the id of the post this one answers.
     posted_at is None for now; seed.py gives an earlier time for its made-up posts.
+    picture_id is None, or an upload of this user's that is not used yet.
     """
-    text = check_text(text)
+    text = check_text(text, has_picture=picture_id is not None)
     connection = connect(db_path)
     try:
         if reply_to is not None:
             find_post(connection, reply_to, "reply_to")
+        if picture_id is not None:
+            find_unused_upload(connection, picture_id, user_id)
         cursor = connection.execute(
-            "INSERT INTO posts (author_id, text, posted_at, reply_to) VALUES (?, ?, ?, ?)",
-            (user_id, text, posted_at or now(), reply_to))
+            "INSERT INTO posts (author_id, text, posted_at, reply_to, picture_id) VALUES (?, ?, ?, ?, ?)",
+            (user_id, text, posted_at or now(), reply_to, picture_id))
         connection.commit()
         return find_post(connection, cursor.lastrowid)
     finally:
@@ -396,12 +540,12 @@ def save_post(db_path, user_id, text, reply_to=None, posted_at=None):
 
 def edit_post(db_path, user_id, post_id, text):
     """Check the rules, change the post's text, and return the changed row."""
-    text = check_text(text)
     connection = connect(db_path)
     try:
         post = find_post(connection, post_id)
         if post["author_id"] != user_id:
             raise RuleBroken("You can only edit your own post.")
+        text = check_text(text, has_picture=post["picture_id"] is not None)
         connection.execute("UPDATE posts SET text = ?, edited_at = ? WHERE id = ?",
                            (text, now(), post_id))
         connection.commit()
@@ -411,7 +555,7 @@ def edit_post(db_path, user_id, post_id, text):
 
 
 def delete_post(db_path, user_id, post_id):
-    """Check the rules, erase the post's text and likes, and return the deleted row.
+    """Check the rules, erase the post's text, picture and likes, and return the deleted row.
 
     The row itself stays, so that the replies to it still point at a post.
     """
@@ -421,8 +565,10 @@ def delete_post(db_path, user_id, post_id):
         if post["author_id"] != user_id:
             raise RuleBroken("You can only delete your own post.")
         connection.execute("DELETE FROM likes WHERE post_id = ?", (post_id,))
-        connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ? "
-                           "WHERE id = ?", (now(), post_id))
+        connection.execute("UPDATE posts SET text = '', edited_at = NULL, deleted_at = ?, "
+                           "picture_id = NULL WHERE id = ?", (now(), post_id))
+        if post["picture_id"] is not None:
+            remove_upload(connection, db_path, post["picture_id"])
         connection.commit()
         return connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id = ?",
                                   (post_id,)).fetchone()

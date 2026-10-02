@@ -3,7 +3,8 @@
 // and closes with the Escape key.
 
 import { send } from "./api.js";
-import { postCard } from "./render.js";
+import { checkAndUpload, hiddenFileInput, picturePicker } from "./pictures.js";
+import { avatar, postCard } from "./render.js";
 import { changed, setMe, state } from "./state.js";
 
 export const MAX_TEXT = 280;
@@ -82,6 +83,13 @@ const writeText = document.getElementById("compose-dialog-text");
 const writeError = document.getElementById("compose-dialog-error");
 const writeCount = document.getElementById("compose-dialog-count");
 const writeSubmit = document.getElementById("compose-dialog-submit");
+const writePicture = picturePicker(
+  writeForm.querySelector(".compose-tools"), document.getElementById("compose-dialog-preview"),
+  () => updateWriteCount(), (error) => { writeError.textContent = error; });
+
+function updateWriteCount() {
+  updateCount(writeText, writeCount, writeSubmit, writePicture.id !== null);
+}
 
 let writing = { kind: "post", postId: null };
 let whenSent = () => {};
@@ -108,40 +116,43 @@ export function openWrite(kind, postId = null) {
   }
   writeText.value = kind === "edit" && original ? original.text : "";
   writeError.textContent = "";
-  updateCount(writeText, writeCount, writeSubmit);
+  writePicture.clear();
+  writePicture.hidden = kind === "edit";   // an edit changes the words only
+  updateWriteCount();
   writeDialog.showModal();
   writeText.focus();
 }
 
-writeText.addEventListener("input", () => updateCount(writeText, writeCount, writeSubmit));
+writeText.addEventListener("input", updateWriteCount);
 
 writeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = writeText.value;
-  if (text.trim() === "") {
-    writeError.textContent = "The post must not be empty.";
-    return;
-  }
   writeSubmit.disabled = true;
   const { answer, error } = writing.kind === "edit"
     ? await send("PUT", "/posts", { post_id: writing.postId, text: text })
-    : await send("POST", "/posts", { text: text, reply_to: writing.kind === "reply" ? writing.postId : null });
+    : await send("POST", "/posts", {
+      text: text,
+      reply_to: writing.kind === "reply" ? writing.postId : null,
+      picture_id: writePicture.id,
+    });
   writeSubmit.disabled = false;
   if (error) {
     writeError.textContent = error;
     return;
   }
+  writePicture.clear();
   writeDialog.close();
   whenSent(writing.kind, answer);
 });
 
 // The count next to a Post button: shown from 260 characters on, red over the limit.
-// The button only works when there is something to send, and not too much.
-export function updateCount(box, countLine, button) {
+// The button only works when there is something to send (words or a picture), and not too much.
+export function updateCount(box, countLine, button, hasPicture = false) {
   const length = box.value.length;
   countLine.textContent = length >= MAX_TEXT - 20 ? String(MAX_TEXT - length) : "";
   countLine.classList.toggle("too-long", length > MAX_TEXT);
-  button.disabled = box.value.trim() === "" || length > MAX_TEXT;
+  button.disabled = (box.value.trim() === "" && !hasPicture) || length > MAX_TEXT;
 }
 
 // ---- Editing your profile ----
@@ -152,6 +163,15 @@ const profileBio = document.getElementById("profile-bio");
 const profileBioCount = document.getElementById("profile-bio-count");
 const profileError = document.getElementById("profile-error");
 const profileSave = document.getElementById("profile-save");
+const profilePicturePreview = document.getElementById("profile-picture-preview");
+const profilePictureChange = document.getElementById("profile-picture-change");
+const profilePictureRemove = document.getElementById("profile-picture-remove");
+const profilePictureInput = hiddenFileInput();
+profileForm.append(profilePictureInput);
+
+// The picture chosen in this window: undefined means "keep the one I have",
+// null means "no picture", and { id, url } is a new one, already uploaded.
+let newPicture;
 
 let whenProfileSaved = () => {};
 
@@ -162,6 +182,8 @@ export function onProfileSaved(listener) {
 export function openEditProfile() {
   profileBio.value = state.bio;
   profileError.textContent = "";
+  newPicture = undefined;
+  showProfilePicture();
   updateBioCount();
   profileDialog.showModal();
   profileBio.focus();
@@ -174,12 +196,46 @@ function updateBioCount() {
   profileSave.disabled = length > MAX_BIO;
 }
 
+// The picture as it will be after Save.
+function showProfilePicture() {
+  const address = newPicture === undefined ? state.avatar : (newPicture && newPicture.url);
+  profilePicturePreview.replaceChildren(avatar(state.me, "big", false, address || null));
+  profilePictureRemove.hidden = !address;
+}
+
+profilePictureChange.addEventListener("click", () => profilePictureInput.click());
+profilePictureInput.addEventListener("change", async () => {
+  const file = profilePictureInput.files[0];
+  profilePictureInput.value = "";
+  if (!file) {
+    return;
+  }
+  profilePictureChange.disabled = true;
+  const { answer, error } = await checkAndUpload(file);
+  profilePictureChange.disabled = false;
+  if (error) {
+    profileError.textContent = error;
+    return;
+  }
+  profileError.textContent = "";
+  newPicture = answer;
+  showProfilePicture();
+});
+profilePictureRemove.addEventListener("click", () => {
+  newPicture = null;
+  showProfilePicture();
+});
+
 profileBio.addEventListener("input", updateBioCount);
 
 profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   profileSave.disabled = true;
-  const { answer, error } = await send("PUT", "/me", { bio: profileBio.value });
+  const changes = { bio: profileBio.value };
+  if (newPicture !== undefined) {
+    changes.avatar_id = newPicture ? newPicture.id : null;
+  }
+  const { answer, error } = await send("PUT", "/me", changes);
   profileSave.disabled = false;
   if (error) {
     profileError.textContent = error;

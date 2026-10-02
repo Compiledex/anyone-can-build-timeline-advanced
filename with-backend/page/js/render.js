@@ -4,7 +4,7 @@
 
 import { icon } from "./icons.js";
 import { avatarColour, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
-import { isMe, isShown, likesOf, replyCount, repliesTo, state } from "./state.js";
+import { avatarOf, isMe, isShown, likesOf, replyCount, repliesTo, state } from "./state.js";
 
 // What the buttons on a post do. main.js fills these in.
 export const handlers = {
@@ -32,11 +32,20 @@ export function link(href, className, text) {
   return made;
 }
 
-// A round picture for a person: the first letter of their name, on their own colour.
-export function avatar(name, size = "normal", asLink = true) {
+// A round picture for a person: their picture, or the first letter of their name on their own colour.
+// picture: the address of a picture to show instead (in the Edit profile window).
+export function avatar(name, size = "normal", asLink = true, picture = undefined) {
   const made = asLink ? link(profileLink(name), "avatar avatar-" + size) : element("span", "avatar avatar-" + size);
   made.style.setProperty("--avatar-colour", avatarColour(name));
-  made.append(element("span", "avatar-letter", initials(name)));
+  const address = picture !== undefined ? picture : avatarOf(name);
+  if (address) {
+    const image = element("img");
+    image.src = address;
+    image.alt = "";
+    made.append(image);
+  } else {
+    made.append(element("span", "avatar-letter", initials(name)));
+  }
   if (asLink) {
     made.setAttribute("aria-label", name);
     made.tabIndex = -1;   // the name next to it is the same link, for the keyboard
@@ -89,9 +98,18 @@ export function postCard(post, options = {}) {
     }
   }
 
-  const text = element("p", "post-text");
-  text.append(postText(post.text));
-  main.append(text);
+  if (post.text) {
+    const text = element("p", "post-text");
+    text.append(postText(post.text));
+    main.append(text);
+  }
+  if (post.picture) {
+    const picture = element("img", "post-picture");
+    picture.src = post.picture;
+    picture.alt = "A picture posted by " + post.author;
+    picture.loading = "lazy";
+    main.append(picture);
+  }
 
   if (options.big) {
     main.append(element("p", "post-full-time", fullTime(post.posted_at)));

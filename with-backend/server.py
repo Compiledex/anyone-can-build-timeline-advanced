@@ -58,6 +58,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
         """Find the method for this request and run it. A broken rule becomes an error answer."""
         url = urlparse(self.path)
         action = ROUTES.get((method, url.path))
+        if action is None and method == "GET" and url.path.startswith("/uploads/"):
+            action = TimelineHandler.get_upload
         if action is None and method == "GET" and page_file(url.path):
             self.send_page(page_file(url.path))
             return
@@ -127,8 +129,45 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def put_me(self, query):
         user = self.logged_in_user()
         data = self.read_json()
-        model.edit_profile(self.db, user["id"], data.get("bio"))
+        if "bio" in data:
+            model.edit_profile(self.db, user["id"], data["bio"])
+        if "avatar_id" in data:
+            model.set_avatar(self.db, user["id"], data["avatar_id"])
         self.send_me(200, model.current_user(self.db, self.session_token()))
+
+    def get_people(self, query):
+        self.send_json(200, view.people_to_json(model.people(self.db)))
+
+    # ---- Pictures ----
+
+    def post_uploads(self, query):
+        """The request's body is the picture itself, not JSON."""
+        user = self.logged_in_user()
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise model.RuleBroken("The request must say how long the picture is.")
+        # Read at most one byte more than allowed: enough for the model to see it is too big,
+        # without filling the memory with a huge file.
+        data = self.rfile.read(min(length, model.MAX_UPLOAD + 1))
+        if length > model.MAX_UPLOAD + 1:
+            self.close_connection = True   # the rest of the body was not read
+        row = model.save_upload(self.db, user["id"], data)
+        self.send_json(201, view.upload_to_json(row))
+
+    def get_upload(self, query):
+        file_name = urlparse(self.path).path[len("/uploads/"):]
+        full_path, content_type = model.upload_file(self.db, file_name)
+        with open(full_path, "rb") as file:
+            body = file.read()
+        self.send_answer(200, content_type, body, [
+            # nosniff: the browser must treat it as the picture type we say, and nothing else.
+            ("X-Content-Type-Options", "nosniff"),
+            # Even opened on its own, the file may not load or run anything.
+            ("Content-Security-Policy", "default-src 'none'"),
+            # The name is random and never reused, so the browser may keep it for a year.
+            ("Cache-Control", "public, max-age=31536000, immutable"),
+        ])
 
     # ---- People ----
 
@@ -161,7 +200,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def post_posts(self, query):
         user = self.logged_in_user()
         data = self.read_json()
-        row = model.save_post(self.db, user["id"], data.get("text"), data.get("reply_to"))
+        row = model.save_post(self.db, user["id"], data.get("text"), data.get("reply_to"),
+                              picture_id=data.get("picture_id"))
         self.send_json(201, view.post_to_json(row))
         print(view.post_to_log_line(row), flush=True)   # one line in the terminal for each new post
 
@@ -266,7 +306,8 @@ class TimelineHandler(BaseHTTPRequestHandler):
         # Each window asks for new posts, likes and changes after every change anyone makes.
         # Printing all of those questions would fill the screen, so they are not printed.
         if self.command == "GET" and self.path.startswith(("/posts", "/likes", "/changes", "/me",
-                                                           "/users", "/events")):
+                                                           "/users", "/events", "/people",
+                                                           "/uploads")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
 
@@ -294,6 +335,8 @@ ROUTES = {
     ("POST", "/logout"): TimelineHandler.post_logout,
     ("GET", "/me"): TimelineHandler.get_me,
     ("PUT", "/me"): TimelineHandler.put_me,
+    ("GET", "/people"): TimelineHandler.get_people,
+    ("POST", "/uploads"): TimelineHandler.post_uploads,
     ("GET", "/users"): TimelineHandler.get_users,
     ("POST", "/follows"): TimelineHandler.post_follows,
     ("DELETE", "/follows"): TimelineHandler.delete_follows,

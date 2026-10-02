@@ -437,6 +437,84 @@ class ModelTests(unittest.TestCase):
         model.create_tables(old_path)
         self.assertEqual(model.profile(old_path, "Aiko")["bio"], "")   # Aiko is still there
 
+    # ---- Pictures ----
+
+    PNG = b"\x89PNG\r\n\x1a\n" + b"made-up picture bytes"
+
+    def test_upload_a_picture(self):
+        aiko = self.user("Aiko")
+        row = model.save_upload(self.db_path, aiko, self.PNG)
+        self.assertTrue(row["file_name"].endswith(".png"))
+        self.assertEqual(row["content_type"], "image/png")
+        full_path, _ = model.upload_file(self.db_path, row["file_name"])
+        with open(full_path, "rb") as file:
+            self.assertEqual(file.read(), self.PNG)
+
+    def test_each_picture_type_is_known_by_its_first_bytes(self):
+        aiko = self.user("Aiko")
+        for data, ending in [(b"\xff\xd8\xff\xe0 jpeg", ".jpg"), (b"GIF89a gif", ".gif"),
+                             (b"RIFF\x00\x00\x00\x00WEBPVP8 ", ".webp")]:
+            self.assertTrue(model.save_upload(self.db_path, aiko, data)["file_name"].endswith(ending))
+
+    def test_anything_that_is_not_a_picture_is_refused(self):
+        aiko = self.user("Aiko")
+        for data in [b"", b"just some text", b"<svg xmlns='http://www.w3.org/2000/svg'><script/></svg>",
+                     b"<html><script>alert(1)</script></html>"]:
+            with self.assertRaises(model.RuleBroken):
+                model.save_upload(self.db_path, aiko, data)
+
+    def test_a_picture_over_2_mb_is_refused(self):
+        aiko = self.user("Aiko")
+        model.save_upload(self.db_path, aiko, self.PNG.ljust(model.MAX_UPLOAD, b"x"))
+        with self.assertRaises(model.RuleBroken):
+            model.save_upload(self.db_path, aiko, self.PNG.ljust(model.MAX_UPLOAD + 1, b"x"))
+
+    def test_a_post_with_a_picture_and_no_text(self):
+        aiko = self.user("Aiko")
+        upload = model.save_upload(self.db_path, aiko, self.PNG)
+        row = view.post_to_json(model.save_post(self.db_path, aiko, "", picture_id=upload["id"]))
+        self.assertEqual(row["picture"], "/uploads/" + upload["file_name"])
+        self.assertEqual(row["text"], "")
+
+    def test_a_picture_is_used_once_and_only_by_its_owner(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        upload = model.save_upload(self.db_path, aiko, self.PNG)
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, ben, "mine now", picture_id=upload["id"])
+        model.save_post(self.db_path, aiko, "first", picture_id=upload["id"])
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, aiko, "again", picture_id=upload["id"])
+        with self.assertRaises(model.RuleBroken):
+            model.set_avatar(self.db_path, aiko, upload["id"])
+
+    def test_deleting_a_post_deletes_its_picture(self):
+        aiko = self.user("Aiko")
+        upload = model.save_upload(self.db_path, aiko, self.PNG)
+        model.save_post(self.db_path, aiko, "look", picture_id=upload["id"])
+        full_path, _ = model.upload_file(self.db_path, upload["file_name"])
+        model.delete_post(self.db_path, aiko, 1)
+        self.assertFalse(os.path.exists(full_path))
+        with self.assertRaises(model.NotFound):
+            model.upload_file(self.db_path, upload["file_name"])
+
+    def test_a_profile_picture(self):
+        aiko = self.user("Aiko")
+        first = model.save_upload(self.db_path, aiko, self.PNG)
+        model.set_avatar(self.db_path, aiko, first["id"])
+        self.assertEqual(view.profile_to_json(model.profile(self.db_path, "Aiko"))["avatar"],
+                         "/uploads/" + first["file_name"])
+        second = model.save_upload(self.db_path, aiko, self.PNG)
+        model.set_avatar(self.db_path, aiko, second["id"])          # the old picture is deleted
+        with self.assertRaises(model.NotFound):
+            model.upload_file(self.db_path, first["file_name"])
+        model.set_avatar(self.db_path, aiko, None)                  # no picture: the first letter again
+        self.assertEqual(view.people_to_json(model.people(self.db_path)), [{"name": "Aiko", "avatar": None}])
+
+    def test_only_saved_names_are_ever_opened(self):
+        for wrong in ["../timeline.db", "../model.py", "nothing.png", ""]:
+            with self.assertRaises(model.NotFound):
+                model.upload_file(self.db_path, wrong)
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -529,7 +607,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_sign_up_post_then_get(self):
         aiko = self.signed_up("Aiko")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "bio": "", "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
         status, post = self.send(aiko, "POST", "/posts", {"text": "hello"})
         self.assertEqual((status, post["author"]), (201, "Aiko"))
         status, posts = self.send(self.browser(), "GET", "/posts?after=0")  # anyone can read
@@ -546,7 +624,7 @@ class RealServerTest(unittest.TestCase):
 
     def test_without_logging_in_you_can_read_but_not_write(self):
         stranger = self.browser()
-        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "bio": "", "following": []}))
+        self.assertEqual(self.send(stranger, "GET", "/me"), (200, {"name": None, "bio": "", "avatar": None, "following": []}))
         for method, path, data in [("POST", "/posts", {"text": "hello"}),
                                    ("POST", "/likes", {"post_id": 1}),
                                    ("PUT", "/posts", {"post_id": 1, "text": "hi"}),
@@ -558,12 +636,12 @@ class RealServerTest(unittest.TestCase):
     def test_log_out_then_log_in(self):
         aiko = self.signed_up("Aiko")
         self.send(aiko, "POST", "/logout")
-        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "bio": "", "following": []}))
+        self.assertEqual(self.send(aiko, "GET", "/me"), (200, {"name": None, "bio": "", "avatar": None, "following": []}))
         self.assertEqual(self.send(aiko, "POST", "/posts", {"text": "hello"})[0], 401)
         status, _ = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": "wrong one"})
         self.assertEqual(status, 400)
         status, me = self.send(aiko, "POST", "/login", {"name": "Aiko", "password": PASSWORD})
-        self.assertEqual((status, me), (200, {"name": "Aiko", "bio": "", "following": []}))
+        self.assertEqual((status, me), (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
 
     def test_like_unlike_and_who_liked(self):
         aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
@@ -614,11 +692,11 @@ class RealServerTest(unittest.TestCase):
         self.signed_up("Ben")
         self.assertEqual(self.send(self.browser(), "POST", "/follows", {"name": "Ben"})[0], 401)
         self.assertEqual(self.send(aiko, "POST", "/follows", {"name": "ben"}),
-                         (201, {"name": "Aiko", "bio": "", "following": ["Ben"]}))
+                         (201, {"name": "Aiko", "bio": "", "avatar": None, "following": ["Ben"]}))
         self.assertTrue(self.send(aiko, "GET", "/users?name=Ben")[1]["you_follow"])
         self.assertEqual(self.send(aiko, "GET", "/me")[1]["following"], ["Ben"])
         self.assertEqual(self.send(aiko, "DELETE", "/follows", {"name": "Ben"}),
-                         (200, {"name": "Aiko", "bio": "", "following": []}))
+                         (200, {"name": "Aiko", "bio": "", "avatar": None, "following": []}))
 
 
     def open_events(self):
@@ -686,6 +764,40 @@ class RealServerTest(unittest.TestCase):
         self.assertEqual((status, me["bio"]), (200, "Kyoto weekends."))
         self.assertEqual(self.send(aiko, "GET", "/users?name=Aiko")[1]["bio"], "Kyoto weekends.")
         self.assertEqual(self.send(aiko, "PUT", "/me", {"bio": "a" * 161})[0], 400)
+
+
+    def upload(self, browser, data, content_type="image/png"):
+        request = urllib.request.Request(self.base + "/uploads", method="POST", data=data,
+                                         headers={"Content-Type": content_type})
+        try:
+            with browser.open(request) as answer:
+                return answer.status, json.loads(answer.read())
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, json.loads(error.read())
+
+    def test_pictures_over_http(self):
+        aiko = self.signed_up("Aiko")
+        png = b"\x89PNG\r\n\x1a\n" + b"made-up picture bytes"
+        self.assertEqual(self.upload(self.browser(), png)[0], 401)
+        self.assertEqual(self.upload(aiko, b"<svg><script/></svg>", "image/svg+xml")[0], 400)
+        status, picture = self.upload(aiko, png)
+        self.assertEqual(status, 201)
+        status, post = self.send(aiko, "POST", "/posts", {"text": "", "picture_id": picture["id"]})
+        self.assertEqual((status, post["picture"]), (201, picture["url"]))
+        status, content_type, body = self.get_raw(picture["url"])
+        self.assertEqual((status, content_type, body), (200, "image/png", png))
+        with urllib.request.urlopen(self.base + picture["url"]) as answer:
+            self.assertEqual(answer.headers["X-Content-Type-Options"], "nosniff")
+        for wrong in ["/uploads/../model.py", "/uploads/%2e%2e/timeline.db", "/uploads/nothing.png"]:
+            self.assertEqual(self.get_raw(wrong)[0], 404, wrong)
+
+    def test_a_profile_picture_over_http(self):
+        aiko = self.signed_up("Aiko")
+        _, picture = self.upload(aiko, b"GIF89a made-up")
+        status, me = self.send(aiko, "PUT", "/me", {"avatar_id": picture["id"]})
+        self.assertEqual((status, me["avatar"]), (200, picture["url"]))
+        self.assertEqual(self.send(aiko, "GET", "/people")[1], [{"name": "Aiko", "avatar": picture["url"]}])
 
 
 if __name__ == "__main__":

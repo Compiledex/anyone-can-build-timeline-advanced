@@ -1,3 +1,5 @@
 # The database. The server creates it when it starts; `make reset` deletes it.
 timeline.db
+# The uploaded pictures, kept next to the database.
+uploads/
 __pycache__/

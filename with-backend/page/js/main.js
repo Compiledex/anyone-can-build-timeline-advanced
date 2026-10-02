@@ -9,10 +9,11 @@ import { CANNOT_REACH, get, onLoggedOut, send, showStatus, toast } from "./api.j
 import { onProfileSaved, onSent, openEditProfile, openLogin, openWrite, updateCount } from "./dialogs.js";
 import { postLink, profileLink, readAddress } from "./format.js";
 import { fillIcons } from "./icons.js";
+import { picturePicker } from "./pictures.js";
 import { avatar, element, handlers, link } from "./render.js";
 import { homeScreen, postScreen, profileHandlers, profileScreen, sidebar } from "./screens.js";
 import {
-  addPosts, changed, likesOf, onChange, setLikes, setMe, state, updatePost,
+  addPosts, changed, likesOf, onChange, setLikes, setMe, setPeople, state, updatePost,
 } from "./state.js";
 
 const NOBODY = { name: null, following: [] };
@@ -27,6 +28,13 @@ const compose = document.getElementById("compose");
 const composeText = document.getElementById("compose-text");
 const composeCount = document.getElementById("compose-count");
 const composeButton = compose.querySelector("button[type=submit]");
+const composePicture = picturePicker(
+  compose.querySelector(".compose-tools"), document.getElementById("compose-preview"),
+  () => updateComposeCount(), showStatus);
+
+function updateComposeCount() {
+  updateCount(composeText, composeCount, composeButton, composePicture.id !== null);
+}
 const sidebarHolder = document.getElementById("sidebar");
 const joinBar = document.getElementById("join-bar");
 
@@ -93,8 +101,8 @@ function drawMenu(address) {
     document.getElementById("nav-profile").href = profileLink(state.me);
     document.getElementById("nav-me-link").href = profileLink(state.me);
     document.getElementById("nav-me-name").textContent = state.me;
-    document.getElementById("nav-me-avatar").replaceChildren(avatar(state.me, "small", false));
-    document.getElementById("compose-avatar").replaceChildren(avatar(state.me, "normal", false));
+    document.getElementById("nav-me-avatar").replaceChildren(avatar(state.me, "small", false, state.avatar));
+    document.getElementById("compose-avatar").replaceChildren(avatar(state.me, "normal", false, state.avatar));
   }
 }
 
@@ -104,6 +112,10 @@ onChange(draw);
 
 async function checkMe() {
   setMe(await get("/me"));
+}
+
+async function checkPeople() {
+  setPeople(await get("/people"));
 }
 
 async function checkPosts() {
@@ -153,6 +165,7 @@ async function catchUp() {
     catchUpAgain = false;
     try {
       await checkMe();
+      await checkPeople();
       await checkPosts();
       await checkLikes();
       await checkChanges();
@@ -223,6 +236,7 @@ profileHandlers.follow = async () => {
 profileHandlers.edit = openEditProfile;
 
 onProfileSaved(async () => {
+  await checkPeople().catch(() => {});
   await checkProfile();
   changed();
   toast("Your profile was saved");
@@ -242,18 +256,19 @@ onSent((kind, post) => {
 });
 
 // The post box on Home.
-composeText.addEventListener("input", () => updateCount(composeText, composeCount, composeButton));
+composeText.addEventListener("input", updateComposeCount);
 compose.addEventListener("submit", async (event) => {
   event.preventDefault();
   composeButton.disabled = true;
-  const { error } = await send("POST", "/posts", { text: composeText.value });
+  const { error } = await send("POST", "/posts", { text: composeText.value, picture_id: composePicture.id });
   if (error) {
     showStatus(error);
-    updateCount(composeText, composeCount, composeButton);
+    updateComposeCount();
     return;
   }
   composeText.value = "";
-  updateCount(composeText, composeCount, composeButton);
+  composePicture.clear();
+  updateComposeCount();
   showStatus("");
   catchUp();
 });
@@ -299,6 +314,6 @@ window.addEventListener("hashchange", async () => {
 setInterval(changed, 60 * 1000);
 
 fillIcons();
-updateCount(composeText, composeCount, composeButton);
+updateComposeCount();
 draw();
 listen();

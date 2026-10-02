@@ -4,6 +4,8 @@
 export const state = {
   me: null,               // the logged-in person's name, or null when nobody is logged in
   bio: "",                // their bio
+  avatar: null,           // the address of their picture, or null
+  people: new Map(),      // everyone, by name in small letters: { name, avatar }
   following: new Set(),   // the names they follow, in small letters
   posts: new Map(),       // every post, by id, as the server sent it
   lastId: 0,              // the id of the newest post this window has
@@ -32,7 +34,18 @@ function same(a, b) {
 export function setMe(person) {
   state.me = person.name;
   state.bio = person.bio || "";
+  state.avatar = person.avatar || null;
   state.following = new Set(person.following.map((name) => name.toLowerCase()));
+}
+
+export function setPeople(list) {
+  state.people = new Map(list.map((person) => [person.name.toLowerCase(), person]));
+}
+
+// The address of someone's picture, or null.
+export function avatarOf(name) {
+  const person = state.people.get(name.toLowerCase());
+  return person ? person.avatar : null;
 }
 
 export function isMe(name) {

@@ -32,6 +32,24 @@ export async function send(method, path, data) {
   }
 }
 
+// Send a picture. Its bytes are the whole request, with its type. Returns { answer } or { error }.
+export async function uploadPicture(file) {
+  try {
+    const response = await fetch("/uploads", {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    const answer = await response.json();
+    if (response.status === 401) {
+      whenLoggedOut();
+    }
+    return response.ok ? { answer: answer } : { error: answer.error };
+  } catch (error) {
+    return { error: CANNOT_REACH };
+  }
+}
+
 // Ask the server for something. Throws when it cannot answer.
 export async function get(path) {
   const response = await fetch(path);

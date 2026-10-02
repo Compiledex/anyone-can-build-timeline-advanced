@@ -58,6 +58,7 @@
         <div class="compose-body">
           <label for="compose-text" class="visually-hidden">What is happening?</label>
           <textarea id="compose-text" rows="2" placeholder="What is happening?"></textarea>
+          <div class="picture-preview" id="compose-preview"></div>
           <div class="compose-row">
             <span class="compose-tools"></span>
             <span class="count" id="compose-count"></span>
@@ -111,6 +112,7 @@
       <div id="compose-dialog-original"></div>
       <label for="compose-dialog-text" class="visually-hidden">Your text</label>
       <textarea id="compose-dialog-text" rows="4"></textarea>
+      <div class="picture-preview" id="compose-dialog-preview"></div>
       <p class="dialog-error" id="compose-dialog-error" role="alert"></p>
       <div class="compose-row">
         <span class="compose-tools"></span>
@@ -124,6 +126,13 @@
     <form id="profile-form" class="dialog-body">
       <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
       <h2 class="dialog-title dialog-title-small" id="profile-dialog-title">Edit profile</h2>
+      <div class="profile-picture-row">
+        <span id="profile-picture-preview"></span>
+        <div class="profile-picture-buttons">
+          <button type="button" class="button button-outline" id="profile-picture-change">Change picture</button>
+          <button type="button" class="text-button danger-text" id="profile-picture-remove">Remove picture</button>
+        </div>
+      </div>
       <label for="profile-bio">Bio <span class="label-hint">(up to 160 characters)</span></label>
       <textarea id="profile-bio" class="field" rows="3"></textarea>
       <p class="count field-count" id="profile-bio-count"></p>
