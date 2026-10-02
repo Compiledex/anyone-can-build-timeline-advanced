@@ -282,6 +282,11 @@ def welcome(db_path, name):
         model.now = real_now   # the real clock again, whatever happened
 
 
+def minutes_since(stamp):
+    """How many minutes ago a time like 2026-10-02 15:42 was."""
+    return max(0.0, (time.time() - time.mktime(time.strptime(stamp, "%Y-%m-%d %H:%M"))) / 60)
+
+
 def made_up_post(connection, key):
     """The id of a made-up post, found by its words, or None."""
     words = next(text for k, _, _, text, _ in POSTS if k == key)
@@ -306,22 +311,30 @@ def fill_welcome(db_path, name):
         if person["name"] in PEOPLE:
             raise SystemExit(f"{person['name']} is one of the made-up people. Give your own account's name.")
         own = connection.execute(
-            "SELECT id FROM posts WHERE author_id = ? AND reply_to IS NULL AND repost_of IS NULL "
+            "SELECT id, posted_at FROM posts WHERE author_id = ? AND reply_to IS NULL AND repost_of IS NULL "
             "AND deleted_at IS NULL ORDER BY id DESC LIMIT 1", (person["id"],)).fetchone()
         bookmarks = [made_up_post(connection, key) for key in WELCOME_BOOKMARKS]
     finally:
         connection.close()
 
+    # The made-up times in WELCOME are fitted into the account's own life: nothing happens before
+    # it joined, and nothing reacts to the post before the post was written.
+    joined = minutes_since(person["joined_at"])
     if own is None:
-        at(150)
+        at(min(150, joined))
         post_id = model.save_post(db_path, person["id"], WELCOME_POST)["id"]
+        posted = min(150, joined)
     else:
-        post_id = own["id"]
+        post_id, posted = own["id"], minutes_since(own["posted_at"])
+
+    def when(minutes_ago, about_the_post):
+        limit = min(joined, posted) if about_the_post else joined
+        return minutes_ago * min(1.0, limit / 150)
 
     done = {"follows": 0, "likes": 0, "replies": 0, "mentions": 0, "reposts": 0, "quotes": 0,
             "messages": 0, "bookmarks": 0}
     for who, minutes_ago, what, words in WELCOME:
-        at(minutes_ago)
+        at(when(minutes_ago, what in ("like", "reply", "repost", "quote")))
         try:
             if what == "follow":
                 model.follow(db_path, ids[who], person["name"])
@@ -347,7 +360,7 @@ def fill_welcome(db_path, name):
         except model.RuleBroken:
             pass   # already done before (welcome was run twice): skip it
 
-    at(10)
+    at(when(10, False))
     for post in bookmarks:
         if post is not None:
             try:

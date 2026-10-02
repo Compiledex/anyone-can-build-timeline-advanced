@@ -878,6 +878,9 @@ class SeedTests(unittest.TestCase):
         self.assertEqual(len(model.bookmarks_of(self.db_path, alex)), 3)
         rows = view.posts_to_json(model.posts_after(self.db_path, 0))
         self.assertIn(("Alex", seed.WELCOME_POST), [(row["author"], row["text"]) for row in rows])
+        joined = model.profile(self.db_path, "Alex")["joined_at"]
+        told = model.notifications_of(self.db_path, alex)
+        self.assertTrue(all(row["created_at"] >= joined for row in told))   # nothing before Alex joined
         again = seed.welcome(self.db_path, "Alex")            # twice does no harm
         self.assertEqual(again["follows"] + again["likes"] + again["reposts"] + again["bookmarks"], 0)
         self.assertIs(model.now.__name__, "now")               # the real clock is back
