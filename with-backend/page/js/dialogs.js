@@ -99,7 +99,7 @@ export function onSent(listener) {
   whenSent = listener;
 }
 
-// kind is "post", "reply" or "edit"; postId is the post replied to or edited.
+// kind is "post", "reply", "quote" or "edit"; postId is the post replied to, quoted or edited.
 export function openWrite(kind, postId = null) {
   if (state.me === null) {
     openLogin("login");
@@ -107,11 +107,11 @@ export function openWrite(kind, postId = null) {
   }
   writing = { kind: kind, postId: postId };
   const original = state.posts.get(postId);
-  writeTitle.textContent = { post: "New post", reply: "Reply", edit: "Edit your post" }[kind];
-  writeSubmit.textContent = { post: "Post", reply: "Reply", edit: "Save" }[kind];
-  writeText.placeholder = kind === "reply" ? "Post your reply" : "What is happening?";
+  writeTitle.textContent = { post: "New post", reply: "Reply", quote: "Quote", edit: "Edit your post" }[kind];
+  writeSubmit.textContent = { post: "Post", reply: "Reply", quote: "Post", edit: "Save" }[kind];
+  writeText.placeholder = { reply: "Post your reply", quote: "Add a comment" }[kind] || "What is happening?";
   writeOriginal.replaceChildren();
-  if (kind === "reply" && original) {
+  if ((kind === "reply" || kind === "quote") && original) {
     writeOriginal.append(postCard(original, { preview: true }));
   }
   writeText.value = kind === "edit" && original ? original.text : "";
@@ -134,6 +134,7 @@ writeForm.addEventListener("submit", async (event) => {
     : await send("POST", "/posts", {
       text: text,
       reply_to: writing.kind === "reply" ? writing.postId : null,
+      quote_of: writing.kind === "quote" ? writing.postId : null,
       picture_id: writePicture.id,
     });
   writeSubmit.disabled = false;

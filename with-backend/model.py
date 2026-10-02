@@ -4,7 +4,8 @@ The tables:
   users     each person once, with a hash of their password (never the password), and a bio
   sessions  one row for each logged-in browser, with a hash of its token
   posts     each post points at its author by id; a reply also points at the post
-            it answers; a deleted post keeps its row, with its text erased
+            it answers; a deleted post keeps its row, with its text erased;
+            a repost is a row with no words that points at the post it shares
   likes     one row for each post and user who liked it
   follows   one row for each person and someone they follow
   uploads   each uploaded picture; the file itself is in the uploads folder
@@ -108,7 +109,9 @@ def create_tables(db_path):
             reply_to INTEGER REFERENCES posts(id),     -- empty for a post, the answered post for a reply
             edited_at TEXT,                            -- empty until the author edits it
             deleted_at TEXT,                           -- empty until the author deletes it
-            picture_id INTEGER REFERENCES uploads(id)); -- a picture in the post, or empty
+            picture_id INTEGER REFERENCES uploads(id), -- a picture in the post, or empty
+            repost_of INTEGER REFERENCES posts(id),    -- a repost: the post it shares; it has no words
+            quote_of INTEGER REFERENCES posts(id));    -- a quote: the post it shows under its words
 
         -- The primary key is the pair, so the database keeps each like only once.
         CREATE TABLE IF NOT EXISTS likes (
@@ -127,7 +130,13 @@ def create_tables(db_path):
     # Columns that later versions added. An older timeline.db gets them, empty, so nothing is lost.
     add_missing_columns(connection, "users", {"bio": "TEXT NOT NULL DEFAULT ''",
                                               "avatar_id": "INTEGER REFERENCES uploads(id)"})
-    add_missing_columns(connection, "posts", {"picture_id": "INTEGER REFERENCES uploads(id)"})
+    add_missing_columns(connection, "posts", {"picture_id": "INTEGER REFERENCES uploads(id)",
+                                              "repost_of": "INTEGER REFERENCES posts(id)",
+                                              "quote_of": "INTEGER REFERENCES posts(id)"})
+    # Nobody reposts the same post twice: unique, but only among reposts that are not deleted,
+    # so that a repost can be undone and done again. Even code that skips the model cannot break it.
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_repost_each ON posts (author_id, repost_of) "
+                       "WHERE repost_of IS NOT NULL AND deleted_at IS NULL")
     connection.commit()
     connection.close()
 
@@ -143,7 +152,8 @@ def add_missing_columns(connection, table, columns):
 # Each post, with its author's name looked up in users. The view reads row["author"].
 POSTS_WITH_AUTHORS = ("SELECT posts.id, posts.author_id, users.name AS author, posts.text, "
                       "posts.posted_at, posts.reply_to, posts.edited_at, posts.deleted_at, "
-                      "posts.picture_id, pictures.file_name AS picture_file "
+                      "posts.picture_id, pictures.file_name AS picture_file, "
+                      "posts.repost_of, posts.quote_of "
                       "FROM posts JOIN users ON users.id = posts.author_id "
                       "LEFT JOIN uploads AS pictures ON pictures.id = posts.picture_id")
 
@@ -304,7 +314,8 @@ def profile(db_path, name, viewer_id=None):
         return connection.execute(
             "SELECT name, bio, joined_at, "
             "(SELECT file_name FROM uploads WHERE id = users.avatar_id) AS avatar_file, "
-            "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL) AS posts, "
+            "(SELECT COUNT(*) FROM posts WHERE author_id = users.id AND deleted_at IS NULL "
+            "AND repost_of IS NULL) AS posts, "
             "(SELECT COUNT(*) FROM follows WHERE followed_id = users.id) AS followers, "
             "(SELECT COUNT(*) FROM follows WHERE follower_id = users.id) AS following, "
             "EXISTS (SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = users.id) "
@@ -515,23 +526,38 @@ def find_post(connection, post_id, field="post_id"):
     return row
 
 
-def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=None):
+def find_original(connection, post_id, field="post_id"):
+    """Like find_post, but a repost leads to the post it shares: liking, answering, quoting or
+    reposting a repost acts on the original post."""
+    row = find_post(connection, post_id, field)
+    if row["repost_of"] is not None:
+        row = find_post(connection, row["repost_of"], field)
+    return row
+
+
+def save_post(db_path, user_id, text, reply_to=None, posted_at=None, picture_id=None, quote_of=None):
     """Check the rules, save the post, and return the saved row.
 
     reply_to is None for a new post, or the id of the post this one answers.
     posted_at is None for now; seed.py gives an earlier time for its made-up posts.
     picture_id is None, or an upload of this user's that is not used yet.
+    quote_of is None, or the id of the post this one quotes.
     """
     text = check_text(text, has_picture=picture_id is not None)
+    if reply_to is not None and quote_of is not None:
+        raise RuleBroken("A post can answer a post or quote one, not both.")
     connection = connect(db_path)
     try:
         if reply_to is not None:
-            find_post(connection, reply_to, "reply_to")
+            reply_to = find_original(connection, reply_to, "reply_to")["id"]
+        if quote_of is not None:
+            quote_of = find_original(connection, quote_of, "quote_of")["id"]
         if picture_id is not None:
             find_unused_upload(connection, picture_id, user_id)
         cursor = connection.execute(
-            "INSERT INTO posts (author_id, text, posted_at, reply_to, picture_id) VALUES (?, ?, ?, ?, ?)",
-            (user_id, text, posted_at or now(), reply_to, picture_id))
+            "INSERT INTO posts (author_id, text, posted_at, reply_to, picture_id, quote_of) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, text, posted_at or now(), reply_to, picture_id, quote_of))
         connection.commit()
         return find_post(connection, cursor.lastrowid)
     finally:
@@ -545,6 +571,8 @@ def edit_post(db_path, user_id, post_id, text):
         post = find_post(connection, post_id)
         if post["author_id"] != user_id:
             raise RuleBroken("You can only edit your own post.")
+        if post["repost_of"] is not None:
+            raise RuleBroken("A repost has no words to edit.")
         text = check_text(text, has_picture=post["picture_id"] is not None)
         connection.execute("UPDATE posts SET text = ?, edited_at = ? WHERE id = ?",
                            (text, now(), post_id))
@@ -576,6 +604,41 @@ def delete_post(db_path, user_id, post_id):
         connection.close()
 
 
+def repost(db_path, user_id, post_id, posted_at=None):
+    """Check the rules, share the post with your followers, and return the new repost's row."""
+    connection = connect(db_path)
+    try:
+        original = find_original(connection, post_id)
+        try:
+            cursor = connection.execute(
+                "INSERT INTO posts (author_id, text, posted_at, repost_of) VALUES (?, '', ?, ?)",
+                (user_id, posted_at or now(), original["id"]))
+        except sqlite3.IntegrityError:
+            # The index one_repost_each refused a second live repost of this post by this user.
+            raise RuleBroken("You already reposted this post.")
+        connection.commit()
+        return find_post(connection, cursor.lastrowid)
+    finally:
+        connection.close()
+
+
+def undo_repost(db_path, user_id, post_id):
+    """Check the rules, take back your repost of this post, and return the repost's row (deleted)."""
+    connection = connect(db_path)
+    try:
+        original = find_original(connection, post_id)
+        mine = connection.execute(
+            "SELECT id FROM posts WHERE author_id = ? AND repost_of = ? AND deleted_at IS NULL",
+            (user_id, original["id"])).fetchone()
+        if mine is None:
+            raise RuleBroken("You have not reposted this post.")
+        connection.execute("UPDATE posts SET deleted_at = ? WHERE id = ?", (now(), mine["id"]))
+        connection.commit()
+        return connection.execute(POSTS_WITH_AUTHORS + " WHERE posts.id = ?", (mine["id"],)).fetchone()
+    finally:
+        connection.close()
+
+
 def posts_after(db_path, after):
     """Return every post with an id larger than `after`, oldest first."""
     connection = connect(db_path)
@@ -600,7 +663,7 @@ def like_post(db_path, user_id, post_id):
     """Check the rules, save the like, and return every post's likes, as like_counts does."""
     connection = connect(db_path)
     try:
-        find_post(connection, post_id)
+        post_id = find_original(connection, post_id)["id"]
         try:
             connection.execute("INSERT INTO likes (post_id, user_id) VALUES (?, ?)",
                                (post_id, user_id))
@@ -617,7 +680,7 @@ def unlike_post(db_path, user_id, post_id):
     """Check the rules, remove the like, and return every post's likes, as like_counts does."""
     connection = connect(db_path)
     try:
-        find_post(connection, post_id)
+        post_id = find_original(connection, post_id)["id"]
         cursor = connection.execute("DELETE FROM likes WHERE post_id = ? AND user_id = ?",
                                     (post_id, user_id))
         if cursor.rowcount == 0:

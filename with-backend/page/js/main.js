@@ -190,6 +190,21 @@ function listen() {
 // ---- What the buttons do ----
 
 handlers.reply = (postId) => openWrite("reply", postId);
+handlers.quote = (postId) => openWrite("quote", postId);
+
+handlers.repost = async (postId, undo) => {
+  if (state.me === null) {
+    openLogin("login");
+    return;
+  }
+  const { error } = await send(undo ? "DELETE" : "POST", "/reposts", { post_id: postId });
+  if (error) {
+    showStatus(error);
+    return;
+  }
+  toast(undo ? "Your repost was taken back" : "Reposted");
+  await catchUp();
+};
 handlers.edit = (postId) => openWrite("edit", postId);
 
 handlers.like = async (postId) => {
@@ -249,7 +264,8 @@ onSent((kind, post) => {
     changed();
   }
   catchUp();
-  toast({ post: "Your post was sent", reply: "Your reply was sent", edit: "Your post was saved" }[kind]);
+  toast({ post: "Your post was sent", reply: "Your reply was sent", quote: "Your post was sent",
+          edit: "Your post was saved" }[kind]);
   if (kind === "reply" && readAddress().screen !== "post") {
     location.hash = postLink(post.reply_to);
   }

@@ -4,12 +4,16 @@
 
 import { icon } from "./icons.js";
 import { avatarColour, fullTime, initials, postLink, profileLink, shortTime } from "./format.js";
-import { avatarOf, isMe, isShown, likesOf, replyCount, repliesTo, state } from "./state.js";
+import {
+  avatarOf, isMe, isShown, likesOf, replyCount, repliesTo, repostCount, state, youReposted,
+} from "./state.js";
 
 // What the buttons on a post do. main.js fills these in.
 export const handlers = {
   reply: (postId) => {},
   like: (postId) => {},
+  repost: (postId, undo) => {},
+  quote: (postId) => {},
   edit: (postId) => {},
   remove: (postId) => {},
 };
@@ -62,9 +66,16 @@ export function postText(text) {
 
 // One post. options.preview: no buttons (inside a window). options.big: the post on its own page.
 // options.replyingTo: say which post this one answers.
+// A repost is drawn as the post it shares, with "Ben reposted" above it.
 export function postCard(post, options = {}) {
+  if (post.repost_of !== null) {
+    const original = state.posts.get(post.repost_of);
+    return postCard(original, { ...options, repost: post });
+  }
   const card = element("article", "post-card" + (options.big ? " post-card-big" : ""));
   card.dataset.id = post.id;
+  // The same post can be on the screen twice (itself, and a repost of it): keep their buttons apart.
+  const focusPrefix = options.repost ? "repost" + options.repost.id + "-" : "";
 
   if (post.deleted_at) {
     card.classList.add("deleted");
@@ -74,6 +85,12 @@ export function postCard(post, options = {}) {
   }
 
   const main = element("div", "post-main");
+  if (options.repost) {
+    const line = element("p", "post-reposted");
+    line.append(icon("repost"), document.createTextNode(
+      isMe(options.repost.author) ? "You reposted" : options.repost.author + " reposted"));
+    main.append(line);
+  }
   const head = element("div", "post-head");
   head.append(link(profileLink(post.author), "post-author", post.author));
   if (!options.big) {
@@ -104,18 +121,17 @@ export function postCard(post, options = {}) {
     main.append(text);
   }
   if (post.picture) {
-    const picture = element("img", "post-picture");
-    picture.src = post.picture;
-    picture.alt = "A picture posted by " + post.author;
-    picture.loading = "lazy";
-    main.append(picture);
+    main.append(postPicture(post));
+  }
+  if (post.quote_of !== null) {
+    main.append(quoteBox(state.posts.get(post.quote_of)));
   }
 
   if (options.big) {
     main.append(element("p", "post-full-time", fullTime(post.posted_at)));
   }
   if (!options.preview) {
-    main.append(actionBar(post));
+    main.append(actionBar(post, focusPrefix));
   }
   card.append(avatar(post.author), main);
   opensOnClick(card, post, options);
@@ -137,21 +153,77 @@ function opensOnClick(card, post, options) {
   });
 }
 
-// The row of buttons under a post: reply and like, each with its count.
-function actionBar(post) {
+function postPicture(post) {
+  const picture = element("img", "post-picture");
+  picture.src = post.picture;
+  picture.alt = "A picture posted by " + post.author;
+  picture.loading = "lazy";
+  return picture;
+}
+
+// The post a quote shows: small, in a box, opening the post when clicked.
+function quoteBox(quoted) {
+  if (!quoted || quoted.deleted_at) {
+    return element("div", "quote-box quote-box-gone", "This post was deleted.");
+  }
+  const box = link(postLink(quoted.id), "quote-box");
+  const head = element("span", "quote-head");
+  head.append(avatar(quoted.author, "tiny", false), element("span", "quote-author", quoted.author),
+              element("span", "post-dot", "·"), element("span", "post-time", shortTime(quoted.posted_at)));
+  box.append(head);
+  if (quoted.text) {
+    box.append(element("span", "quote-text", quoted.text));
+  }
+  if (quoted.picture) {
+    box.append(postPicture(quoted));
+  }
+  return box;
+}
+
+// The row of buttons under a post: reply, repost and like, each with its count.
+function actionBar(post, focusPrefix) {
   const bar = element("div", "post-actions");
   const replies = replyCount(post.id);
-  bar.append(actionButton(post.id, "reply", false, replies, "Reply", () => handlers.reply(post.id)));
+  bar.append(actionButton(focusPrefix, post.id, "reply", false, replies, "Reply", () => handlers.reply(post.id)));
+  bar.append(repostMenu(post, focusPrefix));
   const likes = likesOf(post.id);
-  bar.append(actionButton(post.id, "heart", likes.you_liked, likes.likes,
+  bar.append(actionButton(focusPrefix, post.id, "heart", likes.you_liked, likes.likes,
                           likes.you_liked ? "Unlike" : "Like", () => handlers.like(post.id)));
   return bar;
 }
 
-function actionButton(postId, iconName, active, count, label, onClick) {
+// 🔁 opens a small menu: Repost (or Undo repost), and Quote.
+function repostMenu(post, focusPrefix) {
+  const reposted = youReposted(post.id);
+  const count = repostCount(post.id);
+  const menu = element("details", "post-menu repost-menu");
+  const summary = element("summary", "action action-repost" + (reposted ? " active" : ""));
+  summary.dataset.focus = focusPrefix + "repost-" + post.id;
+  summary.setAttribute("aria-label", (reposted ? "Reposted" : "Repost") + (count ? " (" + count + ")" : ""));
+  summary.append(icon("repost"), element("span", "action-count", count > 0 ? String(count) : ""));
+  const list = element("div", "post-menu-list post-menu-list-left");
+  list.append(
+    menuItem("repost", reposted ? "Undo repost" : "Repost", () => handlers.repost(post.id, reposted), menu),
+    menuItem("edit", "Quote", () => handlers.quote(post.id), menu));
+  menu.append(summary, list);
+  return menu;
+}
+
+function menuItem(iconName, words, onClick, menu, danger = false) {
+  const item = element("button", "post-menu-item" + (danger ? " danger" : ""));
+  item.type = "button";
+  item.append(icon(iconName), document.createTextNode(words));
+  item.addEventListener("click", () => {
+    menu.open = false;
+    onClick();
+  });
+  return item;
+}
+
+function actionButton(focusPrefix, postId, iconName, active, count, label, onClick) {
   const button = element("button", "action action-" + iconName + (active ? " active" : ""));
   button.type = "button";
-  button.dataset.focus = iconName + "-" + postId;   // so the keyboard stays here after a redraw
+  button.dataset.focus = focusPrefix + iconName + "-" + postId;   // so the keyboard stays here after a redraw
   button.setAttribute("aria-label", label + (count ? " (" + count + ")" : ""));
   if (iconName === "heart") {
     button.setAttribute("aria-pressed", active);
@@ -167,21 +239,8 @@ function ownMenu(post) {
   const summary = element("summary", "post-menu-button", "⋯");
   summary.setAttribute("aria-label", "More");
   const list = element("div", "post-menu-list");
-  const edit = element("button", "post-menu-item");
-  edit.type = "button";
-  edit.append(icon("edit"), document.createTextNode("Edit"));
-  edit.addEventListener("click", () => {
-    menu.open = false;
-    handlers.edit(post.id);
-  });
-  const remove = element("button", "post-menu-item danger");
-  remove.type = "button";
-  remove.append(icon("trash"), document.createTextNode("Delete"));
-  remove.addEventListener("click", () => {
-    menu.open = false;
-    handlers.remove(post.id);
-  });
-  list.append(edit, remove);
+  list.append(menuItem("edit", "Edit", () => handlers.edit(post.id), menu),
+              menuItem("trash", "Delete", () => handlers.remove(post.id), menu, true));
   menu.append(summary, list);
   return menu;
 }

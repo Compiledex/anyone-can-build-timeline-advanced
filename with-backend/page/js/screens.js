@@ -40,7 +40,10 @@ export function homeScreen(address) {
 // ---- One post, with the posts it answers above it and its replies below ----
 
 export function postScreen(address) {
-  const post = state.posts.get(address.id);
+  let post = state.posts.get(address.id);
+  if (post && post.repost_of !== null) {
+    post = state.posts.get(post.repost_of);   // a repost's page is the page of the post it shares
+  }
   const back = link("#/", "back-link");
   back.append(icon("back"), document.createTextNode("Back to the timeline"));
   if (!post) {
@@ -69,7 +72,7 @@ export function profileScreen(address) {
   const nodes = [profileHeader(name, person)];
 
   if (person) {
-    const theirs = [...state.posts.values()].filter((post) => byAuthor(post, name) && !post.deleted_at);
+    const theirs = [...state.posts.values()].filter((post) => byAuthor(post, name) && !post.deleted_at && isShown(post));
     const shown = address.tab === "replies"
       ? theirs.filter((post) => post.reply_to !== null)
       : theirs.filter((post) => post.reply_to === null);

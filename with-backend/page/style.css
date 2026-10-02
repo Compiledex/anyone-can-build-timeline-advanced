@@ -479,6 +479,12 @@ a:hover {
   opacity: 0.9;
 }
 
+.avatar-tiny {
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+
 .avatar-small {
   width: 34px;
   height: 34px;
@@ -774,6 +780,94 @@ a:hover {
 
 .action-heart:hover .icon {
   background: var(--like-pale);
+}
+
+/* A repost: "Ben reposted" above the post it shares. */
+.post-reposted {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 2px;
+  color: var(--quiet);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.post-reposted .icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.action-repost:hover,
+.action-repost.active {
+  color: var(--number);
+}
+
+.action-repost:hover .icon {
+  background: var(--brand-pale);
+}
+
+.repost-menu {
+  margin-left: 0;
+}
+
+.repost-menu > summary {
+  list-style: none;
+}
+
+.repost-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.post-menu-list-left {
+  right: auto;
+  left: 0;
+}
+
+/* A quote: the quoted post, small, in a box with a thin line. */
+.quote-box {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.quote-box:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.quote-box-gone {
+  color: var(--quiet);
+  font-style: italic;
+}
+
+.quote-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--quiet);
+}
+
+.quote-author {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.quote-text {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quote-box .post-picture {
+  max-height: 260px;
 }
 
 /* "⋯" on your own posts, with Edit and Delete. */

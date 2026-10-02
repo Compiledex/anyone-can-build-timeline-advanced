@@ -34,7 +34,8 @@ def post_to_json(row):
     return {"id": row["id"], "author": row["author"],
             "text": row["text"], "posted_at": row["posted_at"],
             "reply_to": row["reply_to"], "edited_at": row["edited_at"],
-            "deleted_at": row["deleted_at"], "picture": upload_url(row["picture_file"])}
+            "deleted_at": row["deleted_at"], "picture": upload_url(row["picture_file"]),
+            "repost_of": row["repost_of"], "quote_of": row["quote_of"]}
 
 
 def posts_to_json(rows):

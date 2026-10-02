@@ -515,6 +515,87 @@ class ModelTests(unittest.TestCase):
             with self.assertRaises(model.NotFound):
                 model.upload_file(self.db_path, wrong)
 
+    # ---- Reposts and quotes ----
+
+    def test_repost(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        row = view.post_to_json(model.repost(self.db_path, ben, 1))
+        self.assertEqual((row["author"], row["repost_of"], row["text"]), ("Ben", 1, ""))
+
+    def test_you_cannot_repost_a_post_twice(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.repost(self.db_path, ben, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.repost(self.db_path, ben, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.repost(self.db_path, ben, 2)   # reposting the repost reposts the original
+
+    def test_the_database_itself_refuses_a_second_repost(self):
+        aiko = self.user("Aiko")
+        model.save_post(self.db_path, aiko, "hello")
+        connection = model.connect(self.db_path)
+        insert = "INSERT INTO posts (author_id, text, posted_at, repost_of) VALUES (1, '', 'now', 1)"
+        connection.execute(insert)
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(insert)
+        connection.close()
+
+    def test_undo_a_repost_then_repost_again(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.repost(self.db_path, ben, 1)
+        undone = model.undo_repost(self.db_path, ben, 1)
+        self.assertIsNotNone(undone["deleted_at"])
+        with self.assertRaises(model.RuleBroken):
+            model.undo_repost(self.db_path, ben, 1)   # nothing left to undo
+        model.repost(self.db_path, ben, 1)
+
+    def test_liking_or_answering_a_repost_acts_on_the_original(self):
+        aiko, ben, chen = self.user("Aiko"), self.user("Ben"), self.user("Chen")
+        model.save_post(self.db_path, aiko, "hello")
+        model.repost(self.db_path, ben, 1)
+        model.like_post(self.db_path, chen, 2)
+        self.assertEqual(view.like_counts_to_json(model.like_counts(self.db_path))[0]["post_id"], 1)
+        self.assertEqual(model.save_post(self.db_path, chen, "hi!", 2)["reply_to"], 1)
+
+    def test_a_repost_has_no_words_to_edit(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.repost(self.db_path, ben, 1)
+        with self.assertRaises(model.RuleBroken):
+            model.edit_post(self.db_path, ben, 2, "words")
+
+    def test_a_repost_does_not_count_as_a_post_on_a_profile(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.repost(self.db_path, ben, 1)
+        self.assertEqual(model.profile(self.db_path, "Ben")["posts"], 0)
+
+    def test_a_deleted_post_cannot_be_reposted(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        model.delete_post(self.db_path, aiko, 1)
+        with self.assertRaises(model.NotFound):
+            model.repost(self.db_path, ben, 1)
+
+    def test_quote_a_post(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        row = view.post_to_json(model.save_post(self.db_path, ben, "So true!", quote_of=1))
+        self.assertEqual((row["text"], row["quote_of"]), ("So true!", 1))
+
+    def test_a_quote_needs_words_and_a_post_to_quote(self):
+        aiko, ben = self.user("Aiko"), self.user("Ben")
+        model.save_post(self.db_path, aiko, "hello")
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, ben, "  ", quote_of=1)
+        with self.assertRaises(model.NotFound):
+            model.save_post(self.db_path, ben, "So true!", quote_of=7)
+        with self.assertRaises(model.RuleBroken):
+            model.save_post(self.db_path, ben, "So true!", reply_to=1, quote_of=1)
+
 class BellTests(unittest.TestCase):
 
     def test_a_ring_wakes_a_waiting_request(self):
@@ -798,6 +879,20 @@ class RealServerTest(unittest.TestCase):
         status, me = self.send(aiko, "PUT", "/me", {"avatar_id": picture["id"]})
         self.assertEqual((status, me["avatar"]), (200, picture["url"]))
         self.assertEqual(self.send(aiko, "GET", "/people")[1], [{"name": "Aiko", "avatar": picture["url"]}])
+
+
+    def test_reposts_and_quotes_over_http(self):
+        aiko, ben = self.signed_up("Aiko"), self.signed_up("Ben")
+        self.send(aiko, "POST", "/posts", {"text": "hello"})
+        self.assertEqual(self.send(self.browser(), "POST", "/reposts", {"post_id": 1})[0], 401)
+        status, repost = self.send(ben, "POST", "/reposts", {"post_id": 1})
+        self.assertEqual((status, repost["repost_of"]), (201, 1))
+        self.assertEqual(self.send(ben, "POST", "/reposts", {"post_id": 1})[0], 400)
+        status, undone = self.send(ben, "DELETE", "/reposts", {"post_id": 1})
+        self.assertEqual(status, 200)
+        self.assertIsNotNone(undone["deleted_at"])
+        status, quote = self.send(ben, "POST", "/posts", {"text": "So true!", "quote_of": 1})
+        self.assertEqual((status, quote["quote_of"]), (201, 1))
 
 
 if __name__ == "__main__":

@@ -201,7 +201,7 @@ class TimelineHandler(BaseHTTPRequestHandler):
         user = self.logged_in_user()
         data = self.read_json()
         row = model.save_post(self.db, user["id"], data.get("text"), data.get("reply_to"),
-                              picture_id=data.get("picture_id"))
+                              picture_id=data.get("picture_id"), quote_of=data.get("quote_of"))
         self.send_json(201, view.post_to_json(row))
         print(view.post_to_log_line(row), flush=True)   # one line in the terminal for each new post
 
@@ -216,6 +216,16 @@ class TimelineHandler(BaseHTTPRequestHandler):
         data = self.read_json()
         row = model.delete_post(self.db, user["id"], data.get("post_id"))
         self.send_json(200, view.post_to_json(row))
+
+    def post_reposts(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        self.send_json(201, view.post_to_json(model.repost(self.db, user["id"], data.get("post_id"))))
+
+    def delete_reposts(self, query):
+        user = self.logged_in_user()
+        data = self.read_json()
+        self.send_json(200, view.post_to_json(model.undo_repost(self.db, user["id"], data.get("post_id"))))
 
     def get_changes(self, query):
         self.send_json(200, view.posts_to_json(model.changed_posts(self.db)))
@@ -344,6 +354,8 @@ ROUTES = {
     ("POST", "/posts"): TimelineHandler.post_posts,
     ("PUT", "/posts"): TimelineHandler.put_posts,
     ("DELETE", "/posts"): TimelineHandler.delete_posts,
+    ("POST", "/reposts"): TimelineHandler.post_reposts,
+    ("DELETE", "/reposts"): TimelineHandler.delete_reposts,
     ("GET", "/changes"): TimelineHandler.get_changes,
     ("GET", "/likes"): TimelineHandler.get_likes,
     ("POST", "/likes"): TimelineHandler.post_likes,

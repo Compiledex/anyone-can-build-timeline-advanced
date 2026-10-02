@@ -96,8 +96,33 @@ export function replyCount(postId) {
 }
 
 // A deleted post is still shown when replies under it are, so that they keep their place.
+// A repost is shown while it and the post it shares are both there.
 export function isShown(post) {
+  if (post.repost_of !== null) {
+    const original = state.posts.get(post.repost_of);
+    return !post.deleted_at && original !== undefined && !original.deleted_at;
+  }
   return !post.deleted_at || repliesTo(post.id).some(isShown);
+}
+
+// How many times a post was reposted or quoted (not counting undone or deleted ones).
+export function repostCount(postId) {
+  let count = 0;
+  for (const post of state.posts.values()) {
+    if ((post.repost_of === postId || post.quote_of === postId) && !post.deleted_at) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function youReposted(postId) {
+  for (const post of state.posts.values()) {
+    if (post.repost_of === postId && !post.deleted_at && isMe(post.author)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function byAuthor(post, name) {
