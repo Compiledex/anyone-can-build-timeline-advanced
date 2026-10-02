@@ -631,5 +631,27 @@ class RealServerTest(unittest.TestCase):
         self.assertEqual(self.server.bell.rings, rings)
 
 
+    def get_raw(self, path):
+        """Ask for an address exactly as written, without the browser tidying it first."""
+        connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        connection.request("GET", path)
+        answer = connection.getresponse()
+        result = answer.status, answer.getheader("Content-Type"), answer.read()
+        connection.close()
+        return result
+
+    def test_the_page_files_are_served(self):
+        status, content_type, body = self.get_raw("/")
+        self.assertEqual((status, content_type), (200, "text/html; charset=utf-8"))
+        self.assertIn(b"<html", body)
+        status, content_type, _ = self.get_raw("/js/main.js")
+        self.assertEqual((status, content_type), (200, "text/javascript; charset=utf-8"))
+
+    def test_nothing_outside_the_page_folder_is_served(self):
+        for path in ["/model.py", "/server.py", "/timeline.db", "/../model.py", "/js/../../model.py",
+                     "/%2e%2e/model.py", "/page/index.html", "/nothing.js"]:
+            self.assertEqual(self.get_raw(path)[0], 404, path)
+
+
 if __name__ == "__main__":
     unittest.main()

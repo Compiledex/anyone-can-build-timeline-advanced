@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Timeline</title>
+  <!-- The theme's fonts: EB Garamond for headings and names, Roboto and Noto Sans JP for text.
+       Without internet, the page uses the computer's own fonts instead. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400..700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500&family=Roboto:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <!-- The page's JavaScript, as modules: main.js starts everything and imports the rest. -->
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Left: the logo and the menu. On a phone, the menu becomes a bar at the bottom. -->
+    <nav class="side-nav" aria-label="Main menu">
+      <a class="logo" href="#/" aria-label="Timeline, home">
+        <span class="logo-mark" aria-hidden="true">結</span>
+        <span class="logo-word">Timeline</span>
+      </a>
+      <ul class="nav-list">
+        <li><a class="nav-link" href="#/" data-screen="home"><span data-icon="home"></span><span class="nav-label">Home</span></a></li>
+        <li><a class="nav-link" id="nav-profile" href="#/" data-screen="profile" hidden><span data-icon="user"></span><span class="nav-label">Profile</span></a></li>
+      </ul>
+      <button type="button" id="nav-post" class="nav-post" hidden>
+        <span data-icon="feather"></span><span class="nav-label">Post</span>
+      </button>
+      <div id="nav-me" class="nav-me" hidden>
+        <a id="nav-me-link" class="nav-me-link" href="#/">
+          <span id="nav-me-avatar"></span>
+          <span class="nav-me-name nav-label" id="nav-me-name"></span>
+        </a>
+        <button type="button" id="log-out" class="icon-button" aria-label="Log out" title="Log out"><span data-icon="logout"></span></button>
+      </div>
+    </nav>
+
+    <!-- Middle: the screen the address asks for. -->
+    <main class="center">
+      <header class="center-header">
+        <a class="mobile-logo logo-mark" href="#/" aria-label="Timeline, home">結</a>
+        <div class="center-heading">
+          <p class="breadcrumb" id="breadcrumb"></p>
+          <h1 class="page-title" id="page-title">Home</h1>
+        </div>
+        <nav class="tabs" id="tabs" aria-label="Timelines" hidden></nav>
+      </header>
+
+      <p id="status" class="status" role="status" hidden></p>
+
+      <!-- The post box on Home. It stays outside #screen, so that what you type is kept
+           while the timeline below it changes. -->
+      <form id="compose" class="compose" hidden>
+        <span id="compose-avatar"></span>
+        <div class="compose-body">
+          <label for="compose-text" class="visually-hidden">What is happening?</label>
+          <textarea id="compose-text" rows="2" placeholder="What is happening?"></textarea>
+          <div class="compose-row">
+            <span class="compose-tools"></span>
+            <span class="count" id="compose-count"></span>
+            <button type="submit" class="button">Post</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="screen"></div>
+    </main>
+
+    <!-- Right: the sidebar. Hidden on small screens. -->
+    <aside class="sidebar" id="sidebar" aria-label="More"></aside>
+  </div>
+
+  <!-- For visitors: a bar at the bottom, as on the real thing. -->
+  <div class="join-bar" id="join-bar" hidden>
+    <div class="join-bar-inner">
+      <div>
+        <p class="join-bar-title">Don't miss what's happening</p>
+        <p class="join-bar-text">People on Timeline are the first to know.</p>
+      </div>
+      <div class="join-bar-buttons">
+        <button type="button" class="button button-outline-light" data-open-login="login">Log in</button>
+        <button type="button" class="button button-gold" data-open-login="signup">Sign up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The log-in window. -->
+  <dialog id="login-dialog" class="dialog" aria-labelledby="login-title">
+    <form id="login-form" method="dialog" class="dialog-body">
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
+      <span class="logo-mark logo-mark-big" aria-hidden="true">結</span>
+      <h2 class="dialog-title" id="login-title">Log in to Timeline</h2>
+      <label for="login-name">Name</label>
+      <input id="login-name" type="text" autocomplete="username" maxlength="40">
+      <label for="login-password">Password <span class="label-hint">(at least 8 characters)</span></label>
+      <input id="login-password" type="password" autocomplete="current-password">
+      <p class="dialog-error" id="login-error" role="alert"></p>
+      <button type="submit" class="button button-wide" id="login-submit">Log in</button>
+      <p class="dialog-switch" id="login-switch"></p>
+    </form>
+  </dialog>
+
+  <!-- The window for a reply, a quote or an edit: the post it is about, then the box. -->
+  <dialog id="compose-dialog" class="dialog" aria-labelledby="compose-dialog-title">
+    <form id="compose-dialog-form" class="dialog-body">
+      <button type="button" class="icon-button dialog-close" data-close aria-label="Close"><span data-icon="close"></span></button>
+      <h2 class="dialog-title dialog-title-small" id="compose-dialog-title"></h2>
+      <div id="compose-dialog-original"></div>
+      <label for="compose-dialog-text" class="visually-hidden">Your text</label>
+      <textarea id="compose-dialog-text" rows="4"></textarea>
+      <p class="dialog-error" id="compose-dialog-error" role="alert"></p>
+      <div class="compose-row">
+        <span class="compose-tools"></span>
+        <span class="count" id="compose-dialog-count"></span>
+        <button type="submit" class="button" id="compose-dialog-submit">Reply</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

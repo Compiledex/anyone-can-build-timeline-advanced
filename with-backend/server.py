@@ -20,12 +20,13 @@ import view
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# The page files this server gives to the browser, and the type of each one.
-PAGE_FILES = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/index.html": ("index.html", "text/html; charset=utf-8"),
-    "/style.css": ("style.css", "text/css; charset=utf-8"),
-    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+# The page: every file in the page/ folder, and only those, of these types.
+PAGE_DIR = os.path.realpath(os.path.join(HERE, "page"))
+PAGE_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".svg": "image/svg+xml",
 }
 
 # The name of the cookie that holds a logged-in browser's session token.
@@ -56,10 +57,10 @@ class TimelineHandler(BaseHTTPRequestHandler):
     def route(self, method):
         """Find the method for this request and run it. A broken rule becomes an error answer."""
         url = urlparse(self.path)
-        if method == "GET" and url.path in PAGE_FILES:
-            self.send_page(url.path)
-            return
         action = ROUTES.get((method, url.path))
+        if action is None and method == "GET" and page_file(url.path):
+            self.send_page(page_file(url.path))
+            return
         if action is None:
             self.send_json(404, {"error": "There is nothing at " + method + " " + url.path})
             return
@@ -221,13 +222,12 @@ class TimelineHandler(BaseHTTPRequestHandler):
 
     # ---- Sending the answer ----
 
-    def send_page(self, path):
-        file_name, content_type = PAGE_FILES[path]
-        try:
-            with open(os.path.join(HERE, file_name), "rb") as page_file:
-                self.send_answer(200, content_type, page_file.read())
-        except OSError:
-            self.send_json(404, {"error": "The file " + file_name + " is missing."})
+    def send_page(self, full_path):
+        with open(full_path, "rb") as file:
+            body = file.read()
+        content_type = PAGE_TYPES[os.path.splitext(full_path)[1]]
+        # no-cache: the browser checks for a newer file each time, so a change shows at once.
+        self.send_answer(200, content_type, body, [("Cache-Control", "no-cache")])
 
     def send_me(self, status, user, cookie=None):
         """Send who is logged in (or nobody), and the names they follow."""
@@ -263,6 +263,22 @@ class TimelineHandler(BaseHTTPRequestHandler):
                                                            "/users", "/events")):
             return
         BaseHTTPRequestHandler.log_message(self, format, *args)
+
+
+def page_file(path):
+    """The file in page/ for this address, or None.
+
+    "/" is page/index.html. An address that leads outside page/ (such as "/../model.py"),
+    or to a type not in PAGE_TYPES, gets None, so model.py and timeline.db are never sent.
+    """
+    if path == "/":
+        path = "/index.html"
+    full = os.path.realpath(os.path.join(PAGE_DIR, path.lstrip("/")))
+    if not full.startswith(PAGE_DIR + os.sep):
+        return None
+    if os.path.splitext(full)[1] not in PAGE_TYPES or not os.path.isfile(full):
+        return None
+    return full
 
 
 ROUTES = {

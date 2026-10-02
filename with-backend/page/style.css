@@ -1,0 +1,1189 @@
+/* Timeline: how the page looks.
+   The layout follows the familiar three columns of a social app: a menu on the left, the timeline
+   in the middle, and a sidebar on the right. The look follows the Kansai Gaidai Asian Studies
+   Program site, measured from its own stylesheets: deep blue #0a5181 on white, thin #dbdbdb lines,
+   pale blue-grey boxes, EB Garamond for titles, names and numbers, and navy #0f2646 with gold
+   #f8d491 for dark parts. Titles have a thin line and a short thick bar under them, and numbers
+   are in the lighter blue #3b84b0, as on the site's YUI housing page. Only colours and fonts are
+   borrowed: the logo here is our own (結, "to tie together"), not the university's. */
+
+/* ---- The colours, in one place. Light is the default, like the university site. ---- */
+:root {
+  --background: #ffffff;
+  --surface: #ffffff;
+  --hover: #f5f8fa;
+  --pale-box: rgba(128, 150, 183, 0.2);   /* the site's pale blue-grey boxes */
+  --text: #111111;
+  --quiet: #66707a;
+  --brand: #0a5181;                        /* the site's deep blue */
+  --number: #3b84b0;                       /* the site's lighter blue, for numbers */
+  --link: #3280af;
+  --border: #dbdbdb;
+  --button: #0a5181;
+  --button-text: #ffffff;
+  --like: #c8102e;
+  --like-pale: rgba(200, 16, 46, 0.1);
+  --brand-pale: rgba(10, 81, 129, 0.1);
+  --warning: #dc0d17;
+  --navy: #0f2646;
+  --gold: #f8d491;
+  --header-glass: rgba(255, 255, 255, 0.86);
+  --shadow: 0 4px 18px rgba(15, 38, 70, 0.18);
+  --serif: "EB Garamond", "Noto Serif JP", "Hiragino Mincho ProN", Georgia, serif;
+  --sans: "Roboto", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+}
+
+/* A computer set to dark mode gets the navy and gold of the site's dark section. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f2646;
+    --surface: #0f2646;
+    --hover: #15315a;
+    --pale-box: #15315a;
+    --text: #f4f1e8;
+    --quiet: #a9b4c4;
+    --brand: #f8d491;
+    --number: #f8d491;
+    --link: #fbe3b4;
+    --border: #2c4a75;
+    --button: #f8d491;
+    --button-text: #0f2646;
+    --like: #ff7a8a;
+    --like-pale: rgba(255, 122, 138, 0.14);
+    --brand-pale: rgba(248, 212, 145, 0.14);
+    --warning: #ff8a7a;
+    --header-glass: rgba(15, 38, 70, 0.86);
+    --shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Something with the hidden attribute is never shown, whatever its other styles say. */
+[hidden] {
+  display: none !important;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+a {
+  color: var(--brand);
+}
+
+a:hover {
+  color: var(--link);
+}
+
+:focus-visible {
+  outline: 3px solid var(--link);
+  outline-offset: 2px;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+
+/* ---- The three columns ---- */
+
+.app {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 600px) 350px;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.center {
+  min-height: 100vh;
+  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+
+/* ---- Our logo: 結 in gold on a navy square, and "Timeline" in EB Garamond ---- */
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  border-radius: 9999px;
+  text-decoration: none;
+}
+
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: var(--gold);
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.logo-mark-big {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 8px;
+  font-size: 34px;
+}
+
+/* In dark mode the page is navy too, so the logo gets a thin gold edge. */
+@media (prefers-color-scheme: dark) {
+  .logo-mark {
+    box-shadow: inset 0 0 0 1px var(--gold);
+  }
+}
+
+.logo-word {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+}
+
+/* ---- The menu on the left ---- */
+
+.side-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 8px 16px 16px;
+}
+
+.nav-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px 12px 14px;
+  border-radius: 9999px;
+  color: var(--text);
+  font-size: 20px;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.nav-link[aria-current="page"] {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.nav-link .icon svg {
+  width: 27px;
+  height: 27px;
+}
+
+.nav-post {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 90%;
+  margin-top: 16px;
+  padding: 14px;
+  font-size: 17px;
+}
+
+.nav-post .icon {
+  display: none;
+}
+
+.nav-me {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  padding: 8px;
+  border-radius: 9999px;
+}
+
+.nav-me:hover {
+  background: var(--hover);
+}
+
+.nav-me-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-me-name {
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- The header of the middle column: a breadcrumb, the title with the site's lines, tabs ---- */
+
+.center-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+  background: var(--header-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.mobile-logo {
+  display: none;
+}
+
+.center-heading {
+  position: relative;
+  flex: 1 1 100%;
+  padding: 10px 16px 12px;
+}
+
+/* Under the title: a short thick bar, like the site's "title-border". */
+.center-heading::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 16px;
+  width: 56px;
+  height: 4px;
+  background: var(--brand);
+}
+
+.breadcrumb {
+  margin: 0;
+  color: var(--quiet);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.breadcrumb-slash {
+  margin: 0 0.4em;
+}
+
+.page-title {
+  margin: 0;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.tabs {
+  display: flex;
+  flex: 1 1 100%;
+  border-top: 1px solid var(--border);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  padding: 14px 8px;
+  color: var(--quiet);
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+}
+
+.tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tab[aria-current="page"] {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--brand);
+  transform: translateX(-50%);
+}
+
+.status {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--like-pale);
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* ---- Buttons ---- */
+
+.button,
+.nav-post {
+  border: 1px solid var(--button);
+  border-radius: 9999px;
+  background: var(--button);
+  color: var(--button-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button {
+  padding: 8px 20px;
+}
+
+.button:hover,
+.nav-post:hover {
+  opacity: 0.88;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button-outline {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.button-outline:hover {
+  opacity: 1;
+  background: var(--hover);
+}
+
+.button-gold {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--navy);
+}
+
+.button-outline-light {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #ffffff;
+}
+
+.button-wide {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 20px;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--hover);
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  text-decoration: underline;
+}
+
+/* ---- Avatars: a round picture, or the first letter of the name on the person's own colour ---- */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar-colour, var(--brand));
+  color: #ffffff;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.avatar:hover {
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+.avatar-small {
+  width: 34px;
+  height: 34px;
+  font-size: 17px;
+}
+
+.avatar-big {
+  width: 128px;
+  height: 128px;
+  border: 4px solid var(--background);
+  font-size: 60px;
+}
+
+/* ---- The post box on Home ---- */
+
+.compose {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.compose-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.compose textarea,
+.dialog textarea {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 20px;
+  resize: none;
+}
+
+.compose textarea:focus,
+.dialog textarea:focus {
+  outline: none;
+}
+
+.compose-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.compose-tools {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  color: var(--brand);
+}
+
+.count {
+  color: var(--quiet);
+  font-size: 14px;
+}
+
+.count.too-long {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+/* ---- A post ---- */
+
+.post-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.post-card.clickable {
+  cursor: pointer;
+}
+
+.post-card.clickable:hover {
+  background: var(--hover);
+}
+
+.post-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--quiet);
+}
+
+.post-author {
+  overflow: hidden;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.post-author:hover {
+  text-decoration: underline;
+}
+
+.post-time {
+  color: var(--quiet);
+  text-decoration: none;
+}
+
+.post-time:hover {
+  text-decoration: underline;
+}
+
+.post-edited {
+  font-style: italic;
+}
+
+.post-replying {
+  margin: 0;
+  color: var(--quiet);
+  font-size: 15px;
+}
+
+.post-replying a {
+  text-decoration: none;
+}
+
+.post-text {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.post-card-big .post-text {
+  margin-top: 10px;
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+.post-full-time {
+  margin: 12px 0 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--quiet);
+}
+
+.post-card.deleted {
+  padding: 14px 16px;
+}
+
+.post-deleted-text {
+  margin: 0;
+  color: var(--quiet);
+  font-style: italic;
+}
+
+/* The row of buttons under a post. Each gets its own colour when you point at it. */
+.post-actions {
+  display: flex;
+  justify-content: space-between;
+  max-width: 420px;
+  margin: 6px 0 -6px -8px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 60px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--quiet);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.action .icon {
+  padding: 7px;
+  border-radius: 50%;
+}
+
+.action .icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.action:hover {
+  color: var(--brand);
+}
+
+.action:hover .icon {
+  background: var(--brand-pale);
+}
+
+.action-heart:hover,
+.action-heart.active {
+  color: var(--like);
+}
+
+.action-heart:hover .icon {
+  background: var(--like-pale);
+}
+
+/* "⋯" on your own posts, with Edit and Delete. */
+.post-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.post-menu-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--quiet);
+  font-size: 20px;
+  line-height: 1;
+  list-style: none;
+  cursor: pointer;
+}
+
+.post-menu-button::-webkit-details-marker {
+  display: none;
+}
+
+.post-menu-button:hover {
+  background: var(--brand-pale);
+  color: var(--brand);
+}
+
+.post-menu-list {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 10;
+  min-width: 160px;
+  padding: 6px 0;
+  border-radius: 12px;
+  background: var(--background);
+  box-shadow: var(--shadow);
+}
+
+.post-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.post-menu-item:hover {
+  background: var(--hover);
+}
+
+.post-menu-item.danger {
+  color: var(--warning);
+}
+
+/* Replies under a post, moved in, with a line that starts under the avatar. */
+.thread-replies {
+  margin-left: 37px;
+  border-left: 2px solid var(--border);
+}
+
+.chain .post-card {
+  border-bottom: 0;
+}
+
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--quiet);
+  text-decoration: none;
+}
+
+.empty {
+  padding: 48px 32px;
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.empty-text {
+  margin: 0;
+  color: var(--quiet);
+}
+
+/* ---- A profile ---- */
+
+.profile {
+  padding: 0 16px 12px;
+}
+
+/* The banner: navy, with a band of gold, like the site's dark section. */
+.profile-banner {
+  height: 150px;
+  margin: 0 -16px;
+  background:
+    linear-gradient(115deg, transparent 62%, rgba(248, 212, 145, 0.18) 62%, rgba(248, 212, 145, 0.18) 70%, transparent 70%),
+    var(--navy);
+  border-bottom: 3px solid var(--gold);
+}
+
+.profile-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: -64px;
+}
+
+.profile-name {
+  margin: 8px 0 0;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.profile-handle,
+.profile-facts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--quiet);
+}
+
+.profile-facts {
+  margin-top: 10px;
+}
+
+.profile-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 8px 0 0;
+  color: var(--quiet);
+}
+
+/* Numbers in EB Garamond and the lighter blue, as on the YUI page. */
+.profile-number strong {
+  color: var(--number);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+/* ---- The sidebar: the site's pale blue-grey boxes ---- */
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 12px 20px;
+  overflow-y: auto;
+}
+
+.side-box {
+  margin-bottom: 16px;
+  padding: 14px 16px 16px;
+  border-radius: 16px;
+  background: var(--pale-box);
+}
+
+.side-title {
+  margin: 0 0 8px;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.side-text {
+  margin: 0 0 4px;
+  color: var(--quiet);
+}
+
+.side-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 8px 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.side-person:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.side-person-name {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.side-about {
+  margin: 0;
+  padding: 0 16px;
+  color: var(--quiet);
+  font-size: 13px;
+}
+
+/* ---- Windows: logging in, writing ---- */
+
+.dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.dialog::backdrop {
+  background: rgba(15, 38, 70, 0.55);
+}
+
+.dialog-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 24px 20px;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+
+.dialog-title {
+  margin: 8px 0 18px;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.dialog-title-small {
+  margin: 2px 0 10px 40px;
+  font-size: 22px;
+  text-align: left;
+}
+
+.dialog label {
+  margin: 10px 0 4px;
+  color: var(--quiet);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.label-hint {
+  font-weight: 400;
+}
+
+.dialog input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+}
+
+.dialog input:focus {
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
+}
+
+.dialog-error {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.dialog-switch {
+  margin: 14px 0 0;
+  color: var(--quiet);
+  text-align: center;
+}
+
+.dialog .post-card {
+  padding: 4px 0 12px;
+  border-bottom: 0;
+}
+
+/* ---- For visitors: the bar at the bottom, navy and gold ---- */
+
+.join-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  background: var(--navy);
+  color: #ffffff;
+  border-top: 3px solid var(--gold);
+}
+
+.join-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 12px 16px;
+}
+
+.join-bar-title {
+  margin: 0;
+  color: var(--gold);
+  font-family: var(--serif);
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.join-bar-text {
+  margin: 0;
+  color: #d5dbe5;
+}
+
+.join-bar-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+body:has(.join-bar:not([hidden])) .app {
+  padding-bottom: 96px;
+}
+
+/* A short message at the bottom that goes away by itself. */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  z-index: 30;
+  margin: 0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--brand);
+  color: var(--button-text);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+}
+
+/* ---- Smaller screens ---- */
+
+/* A tablet: the menu shows only its icons, and the sidebar goes. */
+@media (max-width: 1100px) {
+  .app {
+    grid-template-columns: 88px minmax(0, 600px);
+  }
+
+  .sidebar,
+  .logo-word,
+  .nav-label {
+    display: none;
+  }
+
+  .side-nav {
+    align-items: center;
+    padding: 8px;
+  }
+
+  .logo {
+    padding: 8px;
+  }
+
+  .nav-link {
+    padding: 12px;
+  }
+
+  .nav-post {
+    width: 54px;
+    height: 54px;
+    padding: 0;
+  }
+
+  .nav-post .icon {
+    display: inline-flex;
+  }
+
+  .nav-me {
+    flex-direction: column;
+  }
+}
+
+/* A phone: the middle column fills the screen, and the menu is a bar at the bottom. */
+@media (max-width: 700px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .center {
+    border: 0;
+    padding-bottom: 64px;
+  }
+
+  .side-nav {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+    height: 56px;
+    padding: 0;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+  }
+
+  .logo,
+  .nav-me {
+    display: none !important;
+  }
+
+  .nav-list {
+    display: flex;
+    flex: 1;
+    justify-content: space-around;
+  }
+
+  .nav-post {
+    position: fixed;
+    right: 16px;
+    bottom: 72px;
+    margin: 0;
+    box-shadow: var(--shadow);
+  }
+
+  .mobile-logo {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    margin: 10px 0 0 16px;
+    font-size: 21px;
+  }
+
+  .center-heading {
+    flex-basis: auto;
+  }
+
+  .join-bar {
+    bottom: 0;
+  }
+
+  .join-bar-title {
+    font-size: 20px;
+  }
+
+  .avatar-big {
+    width: 96px;
+    height: 96px;
+    font-size: 44px;
+  }
+
+  .profile-top {
+    margin-top: -48px;
+  }
+}
