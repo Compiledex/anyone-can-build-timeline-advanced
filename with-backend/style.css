@@ -1,32 +1,41 @@
 /* Timeline: how the page looks.
-   This file is the same in page-only/ and with-backend/, so both versions look the same.
-   The type is large because the page is read from the back of a room. */
+   The look follows the Kansai Gaidai Asian Studies Program site: a deep blue on white, thin grey
+   lines, pill-shaped buttons, EB Garamond for headings and names, and navy with gold for dark parts.
+   Only the colours and fonts are borrowed: no logo, no photos. */
 
-/* The colours, in one place. Dark is the default. */
+/* The colours, in one place. Light is the default, like the university site. */
 :root {
-  --background: #002b36;
-  --card: #073642;
-  --text: #eee8d5;
-  --quiet: #a7b5b5;
-  --author: #e6b422;
-  --button: #1d6fa8;
+  --background: #ffffff;
+  --surface: #ffffff;          /* cards: posts, the post box */
+  --surface-hover: #edf1f4;    /* the pale blue-grey the site uses on hover */
+  --text: #111111;
+  --quiet: #707070;            /* times, counts, labels */
+  --brand: #0a5181;            /* the site's deep blue: title, names, buttons */
+  --link: #3280af;             /* the site's link blue, on hover */
+  --border: #dbdbdb;           /* the site's thin grey lines */
+  --button: #0a5181;
   --button-text: #ffffff;
-  --warning: #ff8a7a;
-  --border: #586e75;
+  --warning: #dc0d17;          /* the site's red: errors, a liked heart */
+  --navy: #0f2646;             /* the site's dark section */
+  --gold: #f8d491;             /* the gold used on that dark section */
+  --serif: "EB Garamond", "Noto Serif JP", "Hiragino Mincho ProN", Georgia, serif;
+  --sans: "Roboto", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
 }
 
-/* The same colours for a computer set to light mode. */
-@media (prefers-color-scheme: light) {
+/* A computer set to dark mode gets the navy and gold of the site's dark section. */
+@media (prefers-color-scheme: dark) {
   :root {
-    --background: #fdf6e3;
-    --card: #ffffff;
-    --text: #002b36;
-    --quiet: #4f5f63;
-    --author: #7a5a00;
-    --button: #1d6fa8;
-    --button-text: #ffffff;
-    --warning: #b3261e;
-    --border: #93a1a1;
+    --background: #0f2646;
+    --surface: #15315a;
+    --surface-hover: #1d3f6e;
+    --text: #f4f1e8;
+    --quiet: #a9b4c4;
+    --brand: #f8d491;
+    --link: #fbe3b4;
+    --border: #2c4a75;
+    --button: #f8d491;
+    --button-text: #0f2646;
+    --warning: #ff8a7a;
   }
 }
 
@@ -38,36 +47,85 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 24px;
-  line-height: 1.4;
+  font-family: var(--sans);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+/* Something with the hidden attribute is never shown, whatever its other styles say. */
+[hidden] {
+  display: none !important;
+}
+
+/* ---- The bar at the top: a thin blue line, then the title in the serif font. ---- */
+
+.top-bar {
+  border-top: 5px solid var(--brand);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.top-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 14px 16px;
+}
+
+.brand {
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
 }
 
 main {
-  max-width: 900px;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 24px 16px 48px;
 }
 
-h1 {
-  margin: 0 0 16px;
-  font-size: 44px;
+a {
+  color: var(--brand);
+}
+
+a:hover {
+  color: var(--link);
+}
+
+/* ---- Boxes, labels and buttons ---- */
+
+.card {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
 }
 
 label {
   display: block;
   margin-bottom: 6px;
   color: var(--quiet);
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 input,
 textarea {
   width: 100%;
-  padding: 12px 14px;
-  border: 2px solid var(--border);
-  border-radius: 10px;
-  background: var(--card);
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
   color: var(--text);
   font: inherit;
 }
@@ -78,13 +136,14 @@ textarea {
 
 input:focus,
 textarea:focus,
-button:focus {
-  outline: 3px solid var(--author);
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--link);
   outline-offset: 2px;
 }
 
 .name-row {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .post-row {
@@ -96,6 +155,7 @@ button:focus {
 
 .count {
   color: var(--quiet);
+  font-size: 15px;
 }
 
 .count.too-long {
@@ -103,23 +163,60 @@ button:focus {
   font-weight: 700;
 }
 
+/* The main buttons: pill-shaped and filled, like the site's. */
 button {
-  padding: 12px 32px;
-  border: none;
-  border-radius: 999px;
+  padding: 10px 30px;
+  border: 1px solid var(--button);
+  border-radius: 9999px;
   background: var(--button);
   color: var(--button-text);
   font: inherit;
-  font-weight: 700;
+  font-weight: 500;
+  letter-spacing: 0.04em;
   cursor: pointer;
 }
 
-.status {
-  min-height: 1.4em;
-  margin: 12px 0;
-  color: var(--warning);
-  font-weight: 700;
+button:hover {
+  opacity: 0.85;
 }
+
+/* The small buttons under a post, and Cancel: pill-shaped outlines. */
+.small-button {
+  padding: 3px 16px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--brand);
+  font-size: 15px;
+}
+
+.small-button:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+.small-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.status {
+  min-height: 1.6em;
+  margin: 8px 0;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* "Replying to Aiko" or "Editing your post", above the box. */
+.mode-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: var(--brand);
+  font-weight: 500;
+}
+
+/* ---- The timeline ---- */
 
 .timeline {
   margin: 0;
@@ -130,73 +227,56 @@ button {
 .post {
   margin-bottom: 12px;
   padding: 14px 18px;
-  border: 2px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
 }
 
 .post-author {
-  color: var(--author);
-  font-weight: 700;
+  color: var(--brand);
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
-.post-time {
-  margin-left: 12px;
+.post-time,
+.post-edited {
+  margin-left: 10px;
   color: var(--quiet);
+  font-size: 15px;
+}
+
+.post-edited {
+  font-style: italic;
 }
 
 .post-text {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-/* Something with the hidden attribute is never shown, whatever its other styles say. */
-[hidden] {
-  display: none !important;
-}
-
-/* "edited 15:50", after the time. */
-.post-edited {
-  margin-left: 12px;
-  color: var(--quiet);
-  font-style: italic;
-}
-
-/* The Like, Reply and Edit buttons under each post, and Cancel:
-   smaller and quieter than the Post button. */
+/* The Like, Reply, Edit and Delete buttons under each post. */
 .post-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.small-button {
-  padding: 4px 18px;
-  border: 2px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  font-weight: 600;
-}
-
-.small-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-/* A post this name has liked. */
+/* A post this name has liked: a red heart. */
 .like-button.liked {
   border-color: var(--warning);
   color: var(--warning);
 }
 
-/* Replies sit under their post, moved in a little, with a line on the left. */
+/* Replies sit under their post, moved in a little, with a blue line on the left. */
 .replies {
   margin: 0;
   padding: 0 0 0 16px;
   list-style: none;
-  border-left: 3px solid var(--border);
+  border-left: 2px solid var(--brand);
 }
 
 .replies:not(:empty) {
@@ -205,16 +285,8 @@ button {
 
 .replies .post {
   margin-bottom: 8px;
-}
-
-/* "Replying to Aiko" or "Editing your post", above the box. */
-.mode-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 8px;
-  color: var(--author);
-  font-weight: 700;
+  border-color: transparent;
+  background: var(--surface-hover);
 }
 
 /* A deleted post: no name, no time, no buttons; only "This post was deleted." */
